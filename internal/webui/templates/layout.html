@@ -1,0 +1,24 @@
+{{ define "layout" }}
+<!doctype html>
+<html lang="">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+        <title>Cadet</title>
+        <!-- Tailwind CSS -->
+        <link href="/static/css/main.css" rel="stylesheet">
+
+        <!-- Htmx -->
+        <script src="/static/js/vendor/htmx.min.js@2.0.6"></script>
+    </head>
+    <body>
+        <main>
+            <header>
+                {{ block "header" . }}{{ end }}
+            </header>
+            {{ block "content" . }}{{ end }}
+        </main>
+    </body>
+</html>
+{{ end }}
