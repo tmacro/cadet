@@ -3,8 +3,8 @@ package config
 import (
 	"encoding/json"
 
-	"github.com/hashicorp/consul/api"
 	"github.com/caddyserver/caddy/v2"
+	"github.com/hashicorp/consul/api"
 
 	"github.com/tmacro/cadet/pkg/watch"
 )
@@ -14,7 +14,7 @@ func WatchCaddyConfig(kv *api.KV, key string) watch.Watchable[*caddy.Config] {
 		var cfg caddy.Config
 
 		if in == nil || in.Value == nil {
-			return &cfg, nil
+			return nil, nil
 		}
 
 		err := json.Unmarshal(in.Value, &cfg)

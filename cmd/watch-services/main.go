@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/tmacro/cadet/pkg/config"
 
@@ -73,12 +74,12 @@ func main() {
 
 	endpoint, err := url.Parse(CLI.URL)
 	if err != nil {
-		log.Fatal("invalid consul endpoint: %v", err)
+		log.Fatalf("invalid consul endpoint: %v", err)
 	}
 
 	client, kv, err := consul.CreateClient(endpoint.Scheme, endpoint.Host, "")
 	if err != nil {
-		log.Fatal("failed to create consul client: %v", err)
+		log.Fatalf("failed to create consul client: %v", err)
 	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -137,6 +138,7 @@ func onChange(rc config.RemoteConfig) bool {
 	return true
 }
 
-func onError(err error) {
-	log.Error()
+func onError(err error) (time.Duration, bool) {
+	log.Error(err)
+	return 0, false
 }

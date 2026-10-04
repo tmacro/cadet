@@ -3,6 +3,7 @@ package cadet
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"slices"
 
 	"github.com/caddyserver/caddy/v2"
@@ -17,6 +18,17 @@ import (
 	"github.com/tmacro/cadet/pkg/log"
 	"github.com/tmacro/cadet/pkg/service"
 )
+
+var WildcardCIDR *net.IPNet
+
+func init() {
+	_, ipnet, err := net.ParseCIDR("0.0.0.0/0")
+	if err != nil {
+		panic(err)
+	}
+
+	WildcardCIDR = ipnet
+}
 
 func (plug *Plugin) generateCaddyConfig(conf *caddy.Config, services service.Map, zonfConf *config.Zone, aclConf *config.ACL) error {
 	if conf == nil {
@@ -119,7 +131,7 @@ Outer:
 		} else {
 			for _, zone := range svc.Zones {
 				if !slices.Contains(zonfConf.Zones, zone) {
-					log.Warnf("zone %s not found in zone config", zone, svc.ID)
+					log.Warnf("service %s not found in zone %s config", svc.ID, zone)
 					continue
 				}
 				hostnames = append(hostnames, fmt.Sprintf("%s.%s", svc.Name, zone))
@@ -148,8 +160,9 @@ Outer:
 
 		for _, control := range policyToApply {
 			networks := []acl.Network{}
-			network, ok := aclConf.Networks[control.Entity]
-			if ok {
+			if control.Entity == "all" {
+				networks = append(networks, acl.Network{WildcardCIDR})
+			} else if network, ok := aclConf.Networks[control.Entity]; ok {
 				networks = append(networks, network)
 			} else {
 				if group, ok := aclConf.Groups[control.Entity]; ok {
@@ -223,6 +236,19 @@ Outer:
 			},
 			MatcherSetsRaw: caddyhttp.RawMatcherSets{proxyMatchers},
 			Terminal:       true,
+		})
+
+		accessHandler := &caddyhttp.StaticResponse{
+			StatusCode: caddyhttp.WeakString("404"),
+			Body:       "Not Found",
+			Close:      true,
+		}
+
+		subroute.Routes = append(subroute.Routes, caddyhttp.Route{
+			HandlersRaw: []json.RawMessage{
+				caddyconfig.JSONModuleObject(accessHandler, "handler", "static_response", nil),
+			},
+			Terminal: true,
 		})
 
 		servers := []string{"tls"}

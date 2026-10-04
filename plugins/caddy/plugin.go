@@ -2,8 +2,11 @@ package cadet
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/hashicorp/consul/api"
@@ -18,9 +21,18 @@ import (
 	"github.com/tmacro/cadet/pkg/service"
 )
 
+var plugMu *sync.Mutex
+
 func init() {
+	plugMu = &sync.Mutex{}
 	caddy.RegisterModule(Plugin{})
 }
+
+const (
+	errorCooldown  = time.Second * 30
+	initialBackoff = time.Millisecond * 100
+	maxBackoff     = time.Second * 10
+)
 
 type Plugin struct {
 	Consul           *config.ConsulConfig    `json:"consul"`
@@ -34,6 +46,10 @@ type Plugin struct {
 	kv      *api.KV
 
 	watcher *config.Watcher
+
+	backoffMu   *sync.Mutex
+	lastError   time.Time
+	lastBackoff time.Duration
 }
 
 var (
@@ -50,6 +66,7 @@ func NewPlugin() *Plugin {
 		Consul:           config.DefaultConsulConfig(),
 		AutoReverseProxy: DefaultAutoReverseProxyConfig(),
 		Dashboard:        DefaultDashboardConfig(),
+		backoffMu:        &sync.Mutex{},
 	}
 }
 
@@ -76,7 +93,6 @@ func (plug *Plugin) Provision(ctx caddy.Context) error {
 }
 
 func (plug *Plugin) Start() error {
-	log.Debug("starting cadet")
 	extractCfg := service.ExtractConfig{
 		ServiceTag:   plug.Consul.Tags.Service,
 		NoPublishTag: plug.Consul.Tags.NoPublish,
@@ -87,7 +103,12 @@ func (plug *Plugin) Start() error {
 	}
 
 	go supervise.MustRun(plug.ctx, supervise.ServiceFunc(func(ctx context.Context) error {
-		return plug.watcher.Run(ctx, plug.catalog, plug.kv, plug.Consul.GlobalConfigPrefix, extractCfg)
+		plugMu.Lock()
+		log.Debug("starting cadet")
+		err := plug.watcher.Run(ctx, plug.catalog, plug.kv, plug.Consul.GlobalConfigPrefix, extractCfg)
+		log.Debug("cadet exited")
+		plugMu.Unlock()
+		return err
 	}))
 
 	return nil
@@ -95,7 +116,6 @@ func (plug *Plugin) Start() error {
 
 func (plug *Plugin) Stop() error {
 	plug.cancel()
-	log.Debug("cadet exited")
 	return nil
 }
 
@@ -120,6 +140,21 @@ func (plug *Plugin) onChange(rc config.RemoteConfig) bool {
 	cfgJSON := caddyconfig.JSON(caddyConf, nil)
 	log.Debugf("generated Caddy config: %s", cfgJSON)
 
+	var cfg map[string]any
+	err = json.Unmarshal(cfgJSON, &cfg)
+	if err != nil {
+		log.Error("error parsing caddy config", err)
+		return false
+	}
+
+	cfgPretty, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		log.Errorf("error marshaling acddy config")
+		return false
+	}
+
+	fmt.Println(string(cfgPretty))
+
 	n := rand.Intn(1500)
 	log.Debugf("sleeping %d ms before applying new configuration", n)
 
@@ -142,8 +177,26 @@ func (plug *Plugin) onChange(rc config.RemoteConfig) bool {
 	return true
 }
 
-func (plug *Plugin) onError(err error) {
-	log.Error("plugin got error", err)
+func (plug *Plugin) onError(err error) (time.Duration, bool) {
+	if !errors.Is(err, context.Canceled) {
+		log.Error("plugin got error ", err)
+	}
+
+	plug.backoffMu.Lock()
+	defer plug.backoffMu.Unlock()
+
+	var backoff time.Duration
+	if plug.lastBackoff == 0 || time.Since(plug.lastError) > errorCooldown {
+		backoff = initialBackoff
+	} else {
+		backoff = plug.lastBackoff * 2
+		backoff = min(backoff, maxBackoff)
+	}
+
+	plug.lastError = time.Now()
+	plug.lastBackoff = backoff
+
+	return backoff, false
 }
 
 func printServices(svcMap service.Map) {

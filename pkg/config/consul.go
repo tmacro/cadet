@@ -173,7 +173,7 @@ func WatchConsulPrefix(kv *api.KV, prefix string) watch.Watchable[[]*api.KVPair]
 				}
 
 				// Only return if the index has changed
-				log.Debug("got watch change", lastIndex, meta.LastIndex)
+				log.Debug("got watch change ", lastIndex, meta.LastIndex)
 				if meta.LastIndex != lastIndex {
 					results := make([]*api.KVPair, 0)
 					for _, pair := range pairs {

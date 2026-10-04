@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/consul/api"
-	
+
 	"github.com/tmacro/cadet/pkg/acl"
 )
 
@@ -59,9 +59,10 @@ func FromConsulInstances(tags []string, instances []*api.CatalogService, extrCfg
 
 		svcID = instance.ServiceName
 
-		addr := net.ParseIP(instance.Address)
+		// instance.Address
+		addr := net.ParseIP(instance.ServiceAddress)
 		if addr == nil {
-			return nil, fmt.Errorf("invalid IP address in Consul instance: %s", instance.Address)
+			return nil, fmt.Errorf("invalid IP address in Consul instance: %s", instance.ServiceAddress)
 		}
 
 		endpoints = append(endpoints, Endpoint{

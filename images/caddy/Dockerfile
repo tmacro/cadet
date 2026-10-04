@@ -1,15 +1,18 @@
-FROM golang:alpine as builder
+FROM golang:alpine AS builder
 
 ARG XCADDY_VERSION=v0.4.5
 
-ARG CADDY_VERSION=v2.10.0
+ARG CADDY_VERSION=v2.11.4
 
 RUN apk add --update git
 
 # Install xcaddy
 RUN go install github.com/caddyserver/xcaddy/cmd/xcaddy@${XCADDY_VERSION}
 
-COPY . /plugin
+COPY ./go.mod ./go.sum /plugin/
+COPY ./pkg /plugin/pkg
+COPY ./internal /plugin/internal
+COPY ./plugins /plugin/plugins
 
 # Build caddy
 RUN xcaddy build ${CADDY_VERSION} \
@@ -19,9 +22,9 @@ RUN xcaddy build ${CADDY_VERSION} \
 
 FROM alpine
 
-ENV XDG_DATA_HOME /data
+ENV XDG_DATA_HOME=/data
 
-ENV XDG_CONFIG_HOME /config
+ENV XDG_CONFIG_HOME=/config
 
 COPY --from=builder /go/caddy /usr/local/bin/caddy
 

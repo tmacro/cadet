@@ -38,7 +38,7 @@ func setWatchIndex(name string, idx uint64) uint64 {
 	return idx
 }
 
-func runWatch[T any](ctx context.Context, wg *sync.WaitGroup, name string, w watch.Watchable[T], ch chan<- T, onError func(error)) {
+func runWatch[T any](ctx context.Context, wg *sync.WaitGroup, name string, w watch.Watchable[T], ch chan<- T, onError ErrorHandler) {
 	defer wg.Done()
 	defer close(ch)
 
@@ -50,7 +50,19 @@ func runWatch[T any](ctx context.Context, wg *sync.WaitGroup, name string, w wat
 		default:
 			nextIndex, value, err := w(ctx, lastIndex)
 			if err != nil {
-				onError(err)
+				backoff, exit := onError(err)
+				if exit {
+					return
+				}
+
+				if backoff != 0 {
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(backoff):
+					}
+				}
+
 				continue
 			}
 
@@ -74,12 +86,14 @@ type RemoteConfig interface {
 	Caddy() *caddy.Config
 }
 
+type ErrorHandler func(error) (time.Duration, bool)
+
 type Watcher struct {
 	onChange func(RemoteConfig) bool
-	onError  func(error)
+	onError  ErrorHandler
 }
 
-func NewWatcher(onChange func(RemoteConfig) bool, onError func(error)) *Watcher {
+func NewWatcher(onChange func(RemoteConfig) bool, onError ErrorHandler) *Watcher {
 	return &Watcher{
 		onChange: onChange,
 		onError:  onError,
@@ -166,7 +180,7 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 			return nil
 
 		case svcMap := <-catalogServiceUpdates:
-			log.Debug("got catalog update", svcMap)
+			log.Debug("got catalog update ", svcMap)
 			globalMu.Lock()
 			globalCatalogServices = svcMap
 			globalMu.Unlock()
@@ -201,12 +215,14 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 			hasZoneCfg = true
 
 		case caddyCfg := <-configUpdates:
-			log.Debug("got caddy config update")
-			globalMu.Lock()
-			globalCaddyCfg = caddyCfg
-			globalMu.Unlock()
-			needsNotification = true
-			hasCaddyCfg = true
+			if caddyCfg != nil {
+				log.Debug("got caddy config update")
+				globalMu.Lock()
+				globalCaddyCfg = caddyCfg
+				globalMu.Unlock()
+				needsNotification = true
+				hasCaddyCfg = true
+			}
 
 		case <-time.After(2 * time.Second):
 			if !needsNotification {
