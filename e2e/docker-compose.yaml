@@ -1,0 +1,112 @@
+
+services:
+  consul:
+    image: consul:1.15.4
+    ports:
+      - 8500:8500
+      - 8600:8600/tcp
+      - 8600:8600/udp
+    networks:
+      lan:
+        ipv4_address: 172.30.0.2
+
+
+  caddy:
+    build:
+      context: ../
+      dockerfile: ./images/caddy/Dockerfile
+    volumes:
+        - ./caddy.json:/etc/caddy/config.json:ro
+    command: /usr/local/bin/caddy run --config /etc/caddy/config.json
+    ports:
+      - 8080:80
+      - 4043:443
+    networks:
+      lan:
+        ipv4_address: 172.30.0.3
+      neta:
+        ipv4_address: 172.30.1.3
+      netb:
+        ipv4_address: 172.30.2.3
+
+  svc1:
+    build:
+      context: ../
+      dockerfile: ./images/e2e/Dockerfile
+    command:
+      - /usr/local/bin/whoami
+      - --addr
+      - 0.0.0.0:8080
+      - --name
+      - svc1
+    ports:
+      - 18080:8080
+    networks:
+      lan:
+        ipv4_address: 172.30.0.4
+
+  svc2:
+    build:
+      context: ../
+      dockerfile: ./images/e2e/Dockerfile
+    command:
+      - /usr/local/bin/whoami
+      - --addr
+      - 0.0.0.0:8080
+      - --name
+      - svc2
+    ports:
+      - 18081:8080
+    networks:
+      lan:
+        ipv4_address: 172.30.0.5
+
+  driver1:
+    build:
+      context: ../
+      dockerfile: ./images/e2e/Dockerfile
+    command:
+      - /usr/local/bin/driver
+      - --addr
+      - 0.0.0.0:8080
+    ports:
+      - 28080:8080
+    networks:
+      neta:
+        ipv4_address: 172.30.1.4
+
+
+  driver2:
+    build:
+      context: ../
+      dockerfile: ./images/e2e/Dockerfile
+    command:
+      - /usr/local/bin/driver
+      - --addr
+      - 0.0.0.0:8080
+    ports:
+      - 28081:8080
+    networks:
+      netb:
+        ipv4_address: 172.30.2.4
+
+
+networks:
+  lan:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.30.0.0/24
+         gateway: 172.30.0.1
+  neta:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.30.1.0/24
+         gateway: 172.30.1.1
+  netb:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 172.30.2.0/24
+         gateway: 172.30.2.1

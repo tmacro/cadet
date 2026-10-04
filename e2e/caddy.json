@@ -1,0 +1,45 @@
+{
+  "apps": {
+    "cadet": {
+      "consul": {
+        "endpoint": "http://consul:8500",
+        "global_config_prefix": "cadet",
+        "tags": {
+          "service": "cadet",
+          "no_publish": "cadet-no-publish"
+        },
+        "keys": {
+          "name": "cadet-name",
+          "zone": "cadet-zone",
+          "acl": "cadet-acl"
+        }
+      },
+      "auto_reverse_proxy": {
+        "http_port": 80,
+        "https_port": 443,
+        "protocols": ["h1"],
+        "tls_issuers": []
+      }
+    },
+    "tls": {
+      "automation": {
+        "policies": [
+          {
+            "subjects": ["*.cadet.internal", "*.alternate.internal"],
+            "issuers": [{ "module": "internal" }]
+          }
+        ]
+      }
+    }
+  },
+  "admin": {
+    "listen": "0.0.0.0:2019"
+  },
+  "logging": {
+    "logs": {
+      "default": {
+        "level": "debug"
+      }
+    }
+  }
+}
