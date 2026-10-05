@@ -160,7 +160,7 @@ Outer:
 
 		for _, control := range policyToApply {
 			networks := []acl.Network{}
-			if control.Entity == "all" {
+			if control.Entity == acl.Wildcard {
 				networks = append(networks, acl.Network{WildcardCIDR})
 			} else if network, ok := aclConf.Networks[control.Entity]; ok {
 				networks = append(networks, network)

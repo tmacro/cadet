@@ -75,7 +75,7 @@ func (c *ACL) MatchGroups(network string) ([]string, bool) {
 	return nil, false
 }
 
-var DefaultACLPolicy = acl.MustParsePolicy("allow all")
+var DefaultACLPolicy = acl.MustParsePolicy("allow " + acl.Wildcard)
 
 func DefaultACLConfig() *ACL {
 	return &ACL{

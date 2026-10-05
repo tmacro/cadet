@@ -267,7 +267,7 @@ var _ = Describe("Cadet proxy", func() {
 
 		When("services override the default ACL via tags", func() {
 			BeforeEach(func() {
-				writeACL("deny all", "deny")
+				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow neta"})).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
 				time.Sleep(propagationDelay)
@@ -284,7 +284,7 @@ var _ = Describe("Cadet proxy", func() {
 
 		When("services allow a group that spans multiple networks", func() {
 			BeforeEach(func() {
-				writeACL("deny all", "deny")
+				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow all"})).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
 				time.Sleep(propagationDelay)

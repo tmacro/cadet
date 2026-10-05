@@ -113,8 +113,9 @@ publishes it at `<name>.lab.internal` instead.
 
 Requests are matched against `networks` (CIDRs) and `groups` (unions of
 network names). `default_policy` is a space-separated list of
-`<action> <name>` clauses evaluated top-to-bottom; `default_action` is the
-fallback when nothing matches.
+`<action> <name>` clauses evaluated top-to-bottom, where `*` matches every
+source; `default_action` is the fallback when nothing matches. With no
+`acl.json`, the policy defaults to `allow *`.
 
 Services can override the global policy per-registration with
 `cadet-acl` meta — e.g. `cadet-acl: "allow users, deny lab"`.

@@ -15,6 +15,7 @@ import (
 
 	"github.com/alecthomas/kong"
 	"github.com/gorilla/mux"
+	"github.com/miekg/dns"
 	"github.com/tmacro/cadet/pkg/httpserver"
 	"github.com/tmacro/cadet/pkg/log"
 	"github.com/tmacro/cadet/pkg/supervise"
@@ -80,6 +81,7 @@ func main() {
 func newRouter() http.Handler {
 	r := mux.NewRouter()
 	r.HandleFunc("/request", handleRequest).Methods("POST")
+	r.HandleFunc("/resolve", handleResolve).Methods("POST")
 	r.HandleFunc("/_/healthcheck", handleHealthcheck).Methods("GET")
 	return r
 }
@@ -173,4 +175,60 @@ func GetURL(rawUrl string, host string) (int, []byte, error) {
 	}
 
 	return resp.StatusCode, body, nil
+}
+
+func handleResolve(w http.ResponseWriter, r *http.Request) {
+	defer r.Body.Close()
+
+	var req ResolveRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		log.Error(err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	log.Debug("Resolving name")
+
+	resp := DoResolve(req)
+	err = json.NewEncoder(w).Encode(&resp)
+	if err != nil {
+		log.Error(err)
+	}
+}
+
+type ResolveRequest struct {
+	Server string `json:"server"`
+	Name   string `json:"name"`
+}
+
+type ResolveResponse struct {
+	Rcode   string   `json:"rcode"`
+	Answers []string `json:"answers,omitempty"`
+	Err     string   `json:"error,omitempty"`
+}
+
+// DoResolve issues an A query for r.Name against r.Server from this
+// container's network namespace, so the DNS server sees our source address.
+func DoResolve(r ResolveRequest) ResolveResponse {
+	m := new(dns.Msg)
+	m.SetQuestion(dns.Fqdn(r.Name), dns.TypeA)
+
+	client := &dns.Client{Net: "udp", Timeout: 5 * time.Second}
+	in, _, err := client.Exchange(m, r.Server)
+	if err != nil {
+		log.Debugf("resolve %s via %s - error: %v", r.Name, r.Server, err)
+		return ResolveResponse{Err: err.Error()}
+	}
+
+	answers := make([]string, 0, len(in.Answer))
+	for _, rr := range in.Answer {
+		if a, ok := rr.(*dns.A); ok {
+			answers = append(answers, a.A.String())
+		}
+	}
+
+	rcode := dns.RcodeToString[in.Rcode]
+	log.Debugf("resolve %s via %s - %s - %v", r.Name, r.Server, rcode, answers)
+	return ResolveResponse{Rcode: rcode, Answers: answers}
 }

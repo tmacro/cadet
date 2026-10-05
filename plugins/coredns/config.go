@@ -61,6 +61,12 @@ func ParseConfig(c *caddy.Controller) (*PluginConfig, error) {
 				}
 				cfg.Consul.Tags.Service = args[0]
 
+			case "no_publish_tag":
+				if len(args) != 1 {
+					return nil, c.Err("expected exactly one no-publish tag")
+				}
+				cfg.Consul.Tags.NoPublish = args[0]
+
 			case "zone_key":
 				if len(args) != 1 {
 					return nil, c.Err("expected exactly one zone key")

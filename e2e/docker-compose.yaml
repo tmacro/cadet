@@ -29,6 +29,24 @@ services:
       netb:
         ipv4_address: 172.30.2.3
 
+  coredns:
+    build:
+      context: ../
+      dockerfile: ./images/coredns/Dockerfile
+    volumes:
+        - ./Corefile:/etc/coredns/Corefile:ro
+    depends_on:
+      - consul
+    ports:
+      - 15353:53/udp
+    networks:
+      lan:
+        ipv4_address: 172.30.0.6
+      neta:
+        ipv4_address: 172.30.1.6
+      netb:
+        ipv4_address: 172.30.2.6
+
   svc1:
     build:
       context: ../

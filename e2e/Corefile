@@ -1,0 +1,14 @@
+.:53 {
+    errors
+    log
+    debug
+    cadet {
+        consul_endpoint http://consul:8500
+        proxy_service cadet-proxy
+        service_tag cadet
+        no_publish_tag cadet-no-publish
+        name_key cadet-name
+        zone_key cadet-zone
+        acl_key cadet-acl
+    }
+}

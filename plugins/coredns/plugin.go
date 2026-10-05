@@ -88,7 +88,8 @@ type Plugin struct {
 
 	cfg *PluginConfig
 
-	ready chan struct{}
+	ready     chan struct{}
+	readyOnce sync.Once
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -176,14 +177,19 @@ func (plug *Plugin) onChange(rc config.RemoteConfig) bool {
 			endpoints = proxySvc.Endpoints
 		}
 
-		if len(svc.Zones) > 0 {
-			for _, zone := range svc.Zones {
-				if slices.Contains(zoneCfg.Zones, zone) {
-					zoneMap[zone][svc.Name] = &ZoneEntry{
-						ServiceID: svc.ID,
-						Policy:    svc.ACLs,
-						Endpoints: endpoints,
-					}
+		// Match the caddy plugin: services without an explicit zone are
+		// published into the default zone.
+		zones := svc.Zones
+		if len(zones) == 0 && zoneCfg.DefaultZone != "" {
+			zones = []string{zoneCfg.DefaultZone}
+		}
+
+		for _, zone := range zones {
+			if slices.Contains(zoneCfg.Zones, zone) {
+				zoneMap[zone][svc.Name] = &ZoneEntry{
+					ServiceID: svc.ID,
+					Policy:    svc.ACLs,
+					Endpoints: endpoints,
 				}
 			}
 		}
@@ -192,6 +198,9 @@ func (plug *Plugin) onChange(rc config.RemoteConfig) bool {
 	plug.zoneMu.Lock()
 	plug.zoneMap = zoneMap
 	plug.zoneMu.Unlock()
+
+	// The first change marks the end of the watcher's init phase.
+	plug.readyOnce.Do(func() { close(plug.ready) })
 
 	return true
 }
@@ -307,9 +316,12 @@ func (plug *Plugin) evalACL(entry *ZoneEntry, ip *net.IP, aclConfig *config.ACL)
 
 	groups, ok := aclConfig.MatchGroups(network)
 	if !ok {
-		log.Errorf("no matching groups for network: %s", network)
-		return aclConfig.DefaultAction
+		log.Debugf("no matching groups for network: %s", network)
 	}
+
+	// Every source matches the wildcard, mirroring the caddy plugin which
+	// treats it as a match-all range.
+	groups = append(groups, acl.Wildcard)
 
 	for _, group := range groups {
 		action, matched, err := policy.Eval(group)

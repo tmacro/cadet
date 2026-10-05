@@ -8,6 +8,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// Wildcard is the ACL entity that matches every source address.
+const Wildcard = "*"
+
 type Control struct {
 	Action Action `json:"action"`
 	Entity string `json:"entity"`

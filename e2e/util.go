@@ -111,29 +111,63 @@ func (drv Driver) Request(url, host string) (int, string, error) {
 	return resp.Status, resp.Body, nil
 }
 
+// ResolveRequest/ResolveResponse mirror the payloads accepted by the
+// driver's /resolve endpoint.
+type ResolveRequest struct {
+	Server string `json:"server"`
+	Name   string `json:"name"`
+}
+
+type ResolveResponse struct {
+	Rcode   string   `json:"rcode"`
+	Answers []string `json:"answers,omitempty"`
+	Err     string   `json:"error,omitempty"`
+}
+
+type Resolver struct {
+	Endpoint string
+}
+
+// Resolve issues an A query for name against server from inside the
+// resolver's network, returning the rcode and the A record addresses.
+func (res Resolver) Resolve(server, name string) (string, []string, error) {
+	var resp ResolveResponse
+	if err := postJSON(res.Endpoint, ResolveRequest{Server: server, Name: name}, &resp); err != nil {
+		return "", nil, err
+	}
+	if resp.Err != "" {
+		return "", nil, errors.New(resp.Err)
+	}
+	return resp.Rcode, resp.Answers, nil
+}
+
 func callDriver(endpoint string, r Request) (*Response, error) {
-	data, err := json.Marshal(&r)
-	if err != nil {
+	var rb Response
+	if err := postJSON(endpoint, r, &rb); err != nil {
 		return nil, err
+	}
+	return &rb, nil
+}
+
+func postJSON(endpoint string, in, out any) error {
+	data, err := json.Marshal(in)
+	if err != nil {
+		return err
 	}
 
 	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("POST", endpoint, bytes.NewReader(data))
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 
-	var rb Response
-	if err := json.NewDecoder(resp.Body).Decode(&rb); err != nil {
-		return nil, err
-	}
-	return &rb, nil
+	return json.NewDecoder(resp.Body).Decode(out)
 }
 
 // ExpectServiceRequest issues a request through drv and asserts the response
@@ -155,4 +189,24 @@ func ExpectHostUnreachable(drv Driver, url, host string) {
 	GinkgoHelper()
 	_, _, err := drv.Request(url, host)
 	Expect(err).To(HaveOccurred(), "GET %s via %s: expected request to fail", host, drv.Endpoint)
+}
+
+// ExpectRecords resolves name through res and asserts the answer contains
+// exactly the given A record addresses, in any order.
+func ExpectRecords(res Resolver, server, name string, addrs ...string) {
+	GinkgoHelper()
+	rcode, answers, err := res.Resolve(server, name)
+	Expect(err).NotTo(HaveOccurred(), "resolve %s via %s", name, res.Endpoint)
+	Expect(rcode).To(Equal("NOERROR"), "resolve %s via %s: rcode", name, res.Endpoint)
+	Expect(answers).To(ConsistOf(addrs), "resolve %s via %s: answers", name, res.Endpoint)
+}
+
+// ExpectNoRecords asserts that name is not answered by the cadet plugin.
+// Unanswered names fall through to the next plugin; with none configured
+// that surfaces as SERVFAIL, so this only asserts on the empty answer.
+func ExpectNoRecords(res Resolver, server, name string) {
+	GinkgoHelper()
+	_, answers, err := res.Resolve(server, name)
+	Expect(err).NotTo(HaveOccurred(), "resolve %s via %s", name, res.Endpoint)
+	Expect(answers).To(BeEmpty(), "resolve %s via %s: expected no answers", name, res.Endpoint)
 }
