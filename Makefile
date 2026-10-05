@@ -8,6 +8,7 @@ DEADCODE      := $(BIN)/deadcode
 STATICCHECK   := $(BIN)/staticcheck
 GOLANGCI_LINT := $(BIN)/golangci-lint
 GOIMPORTS     := $(BIN)/goimports
+GINKGO        := $(BIN)/ginkgo
 
 CADDY_VERSION         := v2.10.0
 XCADDY_VERSION        := v0.4.5
@@ -15,6 +16,7 @@ DEADCODE_VERSION      := latest
 STATICCHECK_VERSION   := latest
 GOLANGCI_LINT_VERSION := latest
 GOIMPORTS_VERSION     := latest
+GINKGO_VERSION        := latest
 
 $(DIST):
 	@mkdir -p $@
@@ -30,9 +32,10 @@ $(DEADCODE):      PACKAGE=golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION)
 $(STATICCHECK):   PACKAGE=honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
 $(GOLANGCI_LINT): PACKAGE=github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 $(GOIMPORTS):     PACKAGE=golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
+$(GINKGO):        PACKAGE=github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
 
 .PHONY: install-tools
-install-tools: | $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS)
+install-tools: | $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS) $(GINKGO)
 
 .PHONY: vet
 vet:
@@ -107,5 +110,8 @@ whoami-docker:
 	docker buildx build -t $(WHOAMI_DOCKER_IMAGE):$(WHOAMI_DOCKER_TAG) -f images/whoami/Dockerfile .
 
 .PHONY: e2e
-e2e: | caddy-docker coredns-docker whoami-docker
-	go test ./e2e
+e2e: | $(GINKGO)
+	docker compose -f ./e2e/docker-compose.yaml up -d
+	sleep 5
+	$(GINKGO) run -v ./e2e || true
+	docker compose -f ./e2e/docker-compose.yaml down

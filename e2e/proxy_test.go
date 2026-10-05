@@ -1,283 +1,302 @@
 package e2e
 
 import (
-	"testing"
 	"time"
 
-	"github.com/efficientgo/core/testutil"
+	capi "github.com/hashicorp/consul/api"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
-// func deployConsul(e *e2e.DockerEnvironment) (e2e.Runnable, error) {
+// propagationDelay is how long we wait after mutating consul state before
+// expecting Caddy to have reconciled. The underlying watch loop polls at a
+// coarse interval; this gives it room to converge.
+const propagationDelay = 5 * time.Second
 
-// 	_, err = client.KV().Put(&capi.KVPair{
-// 		Key: "cadet/acl.json",
-// 		Value: fmt.Append([]byte(`
-// 			{
-// 			    "networks" : {
-// 			        "local": ["127.0.0.0/8"],
-// 			        "admin": ["10.10.0.0/24"],
-// 			        "users": ["10.20.0.0/24"],
-// 			        "lab": ["10.40.0.0/24"]
-// 			    },
-// 			    "groups" : {
-// 			        "all": ["local", "admin", "users", "lab"]
-// 			    },
-// 			    "default_policy": "allow local",
-// 			    "default_action": "deny"
-// 			}`)),
-// 	}, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+// Drivers are external helpers running on each test network; they issue the
+// actual HTTP request from inside their network namespace so we can assert on
+// per-source-network ACL behavior.
+var (
+	driverA = Driver{Endpoint: "http://127.0.0.1:28080/request"}
+	driverB = Driver{Endpoint: "http://127.0.0.1:28081/request"}
+)
 
-// 	_, err = client.KV().Put(&capi.KVPair{
-// 		Key: "cadet/zone.json",
-// 		Value: fmt.Append([]byte(`
-// 			{
-// 			    "default_zone": "tmacs.cloud",
-// 			    "zones": ["tmacs.cloud", "binha.us"]
-// 			}`)),
-// 	}, nil)
-// 	if err != nil {
-// 		return nil, err
-// 	}
+var _ = Describe("Cadet proxy", func() {
+	var (
+		consul     *capi.Client
+		svc1, svc2 *TestService
+	)
 
-//		return c, nil
-//	}
-//
+	BeforeEach(func() {
+		var err error
+		consul, err = NewConsulClient("http://127.0.0.1:8500")
+		Expect(err).NotTo(HaveOccurred())
 
-var svc1 = &TestService{
-	Name:         "svc1",
-	UID:          GenerateUUID(),
-	Port:         18080,
-	InternalPort: 8080,
-	InternalIP:   "172.30.0.4",
-}
+		Expect(WriteCaddyConfig(consul, FormatCaddyConfig("http://consul:8500"))).To(Succeed())
+		Expect(WriteZoneConfig(consul)).To(Succeed())
 
-var svc2 = &TestService{
-	Name:         "svc2",
-	UID:          GenerateUUID(),
-	Port:         18081,
-	InternalPort: 8080,
-	InternalIP:   "172.30.0.5",
-}
+		// Each spec gets fresh service instances with unique UIDs so stale
+		// catalog entries from a previous spec can't bleed in.
+		svc1 = &TestService{
+			Name:         "svc1",
+			UID:          GenerateUUID(),
+			Port:         18080,
+			InternalPort: 8080,
+			InternalIP:   "172.30.0.4",
+		}
+		svc2 = &TestService{
+			Name:         "svc2",
+			UID:          GenerateUUID(),
+			Port:         18081,
+			InternalPort: 8080,
+			InternalIP:   "172.30.0.5",
+		}
+	})
 
-var driver1 = Driver{
-	Endpoint: "http://127.0.0.1:28080/request",
-}
+	AfterEach(func() {
+		// Best-effort cleanup; swallow errors so one failed deregister does
+		// not mask the real spec failure.
+		_ = svc1.Unregister(consul)
+		_ = svc2.Unregister(consul)
+	})
 
-var driver2 = Driver{
-	Endpoint: "http://127.0.0.1:28081/request",
-}
+	Context("with services on the primary zone", func() {
+		BeforeEach(func() {
+			Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+			Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+			time.Sleep(propagationDelay)
+		})
 
-func TestPrimaryZone(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
+		It("routes requests from network A to both services", func() {
+			ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+			ExpectServiceRequest(driverA, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+		})
 
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
+		It("routes requests from network B to both services", func() {
+			ExpectServiceRequest(driverB, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+			ExpectServiceRequest(driverB, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+		})
+	})
 
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
+	Context("with services pinned to a secondary zone", func() {
+		BeforeEach(func() {
+			meta := map[string]string{"cadet-zone": "alternate.internal"}
+			Expect(svc1.Register(consul, []string{"cadet"}, meta)).To(Succeed())
+			Expect(svc2.Register(consul, []string{"cadet"}, meta)).To(Succeed())
+			time.Sleep(propagationDelay)
+		})
 
-	svc1.Register(consulClient, []string{"cadet"}, nil)
-	defer svc1.Unregister(consulClient)
+		It("serves the alternate hostname from network A", func() {
+			ExpectServiceRequest(driverA, "https://caddy:443", "svc1.alternate.internal", 200, "svc1")
+			ExpectServiceRequest(driverA, "https://caddy:443", "svc2.alternate.internal", 200, "svc2")
+		})
 
-	svc2.Register(consulClient, []string{"cadet"}, nil)
-	defer svc2.Unregister(consulClient)
+		It("serves the alternate hostname from network B", func() {
+			ExpectServiceRequest(driverB, "https://caddy:443", "svc1.alternate.internal", 200, "svc1")
+			ExpectServiceRequest(driverB, "https://caddy:443", "svc2.alternate.internal", 200, "svc2")
+		})
+	})
 
-	time.Sleep(5 * time.Second)
+	Context("when a service is not eligible to be published", func() {
+		When("no service is registered for the hostname", func() {
+			It("does not publish an unknown hostname", func() {
+				ExpectHostUnreachable(driverA, "https://caddy:443", "nothing.cadet.internal")
+			})
+		})
 
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+		When("the service is tagged with the no-publish tag", func() {
+			BeforeEach(func() {
+				Expect(svc1.Register(consul, []string{"cadet", "cadet-no-publish"}, nil)).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
-}
+			It("does not publish the service", func() {
+				ExpectHostUnreachable(driverA, "https://caddy:443", "svc1.cadet.internal")
+			})
+		})
 
-func TestSecondaryZone(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
+		When("the service is missing the cadet tag", func() {
+			BeforeEach(func() {
+				// Nothing but the per-spec UID tag — so the plugin's
+				// `service` tag filter rejects this registration.
+				Expect(svc1.Register(consul, nil, nil)).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
+			It("does not publish the service", func() {
+				ExpectHostUnreachable(driverA, "https://caddy:443", "svc1.cadet.internal")
+			})
+		})
+	})
 
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
+	Context("when a service overrides its hostname via cadet-name", func() {
+		BeforeEach(func() {
+			Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-name": "aliased"})).To(Succeed())
+			time.Sleep(propagationDelay)
+		})
 
-	err = svc1.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-zone": "alternate.internal"})
-	testutil.Ok(t, err)
-	defer svc1.Unregister(consulClient)
+		It("serves the service at the aliased hostname", func() {
+			ExpectServiceRequest(driverA, "https://caddy:443", "aliased.cadet.internal", 200, "svc1")
+		})
 
-	err = svc2.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-zone": "alternate.internal"})
-	testutil.Ok(t, err)
-	defer svc2.Unregister(consulClient)
+		It("does not serve the service at its original name", func() {
+			ExpectHostUnreachable(driverA, "https://caddy:443", "svc1.cadet.internal")
+		})
+	})
 
-	time.Sleep(5 * time.Second)
+	Context("when the service catalog changes", func() {
+		BeforeEach(func() {
+			Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+			time.Sleep(propagationDelay)
+		})
 
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.alternate.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.alternate.internal", 200, "svc2")
+		It("stops routing to a service after it is unregistered", func() {
+			// Confirm reachable first so a failure here is clearly a baseline
+			// problem rather than a propagation issue.
+			ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
 
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.alternate.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.alternate.internal", 200, "svc2")
-}
+			Expect(svc1.Unregister(consul)).To(Succeed())
+			time.Sleep(propagationDelay)
 
-func TestACLDefaultDeny(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
+			ExpectHostUnreachable(driverA, "https://caddy:443", "svc1.cadet.internal")
+		})
+	})
 
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
+	Context("when multiple instances share a service name", func() {
+		// Two instances registered under the same Name pointing at the two
+		// different whoami backends; the proxy should treat them as a single
+		// upstream pool and distribute requests across both.
+		var inst1, inst2 *TestService
 
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
+		BeforeEach(func() {
+			inst1 = &TestService{
+				Name:         "pool",
+				UID:          GenerateUUID(),
+				InternalPort: 8080,
+				InternalIP:   "172.30.0.4", // svc1 whoami backend
+			}
+			inst2 = &TestService{
+				Name:         "pool",
+				UID:          GenerateUUID(),
+				InternalPort: 8080,
+				InternalIP:   "172.30.0.5", // svc2 whoami backend
+			}
+			Expect(inst1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+			Expect(inst2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+			time.Sleep(propagationDelay)
+		})
 
-	err = WriteACLConfig(consulClient, []byte(`
-		{
-		    "networks" : {
-		        "neta": ["172.30.1.0/24"],
-		        "netb": ["172.30.2.0/24"]
-		    },
-		    "groups" : {
-		        "all": ["neta", "netb"]
-		    },
-		    "default_policy": "allow neta",
-		    "default_action": "deny"
-		}`))
-	testutil.Ok(t, err)
-	defer DeleteACLConfig(consulClient)
+		AfterEach(func() {
+			_ = inst1.Unregister(consul)
+			_ = inst2.Unregister(consul)
+		})
 
-	svc1.Register(consulClient, []string{"cadet"}, nil)
-	defer svc1.Unregister(consulClient)
+		It("distributes requests across both backends", func() {
+			// Request enough times that the odds of a correct load balancer
+			// never picking one of the two backends is negligible.
+			const requests = 20
+			seen := make(map[string]int)
+			for range requests {
+				code, body, err := driverA.Request("https://caddy:443", "pool.cadet.internal")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(code).To(Equal(200))
+				seen[body]++
+			}
+			Expect(seen).To(HaveKey("svc1"), "expected to see responses from the svc1 backend")
+			Expect(seen).To(HaveKey("svc2"), "expected to see responses from the svc2 backend")
+		})
+	})
 
-	svc2.Register(consulClient, []string{"cadet"}, nil)
-	defer svc2.Unregister(consulClient)
+	Context("with an ACL policy", func() {
+		// aclNetworks is the common network definition used by every ACL spec;
+		// the policy / action lines are what each spec varies.
+		const aclNetworks = `
+		"networks" : {
+		    "neta": ["172.30.1.0/24"],
+		    "netb": ["172.30.2.0/24"]
+		},
+		"groups" : {
+		    "all": ["neta", "netb"]
+		}`
 
-	time.Sleep(5 * time.Second)
+		writeACL := func(policy, action string) {
+			GinkgoHelper()
+			cfg := []byte(`{` + aclNetworks + `,
+			"default_policy": "` + policy + `",
+			"default_action": "` + action + `"}`)
+			Expect(WriteACLConfig(consul, cfg)).To(Succeed())
+		}
 
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+		AfterEach(func() {
+			_ = DeleteACLConfig(consul)
+		})
 
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
-}
+		When("the default action is deny and allow-neta is the default policy", func() {
+			BeforeEach(func() {
+				writeACL("allow neta", "deny")
+				Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+				Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-func TestACLDefaultAllow(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
+			It("allows network A and denies network B", func() {
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
 
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
+			})
+		})
 
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
+		When("the default action is allow and deny-neta is the default policy", func() {
+			BeforeEach(func() {
+				writeACL("deny neta", "allow")
+				Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+				Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-	err = WriteACLConfig(consulClient, []byte(`
-		{
-		    "networks" : {
-		        "neta": ["172.30.1.0/24"],
-		        "netb": ["172.30.2.0/24"]
-		    },
-		    "groups" : {
-		        "all": ["neta", "netb"]
-		    },
-		    "default_policy": "deny neta",
-		    "default_action": "allow"
-		}`))
-	testutil.Ok(t, err)
-	defer DeleteACLConfig(consulClient)
+			It("denies network A and allows network B", func() {
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
 
-	svc1.Register(consulClient, []string{"cadet"}, nil)
-	defer svc1.Unregister(consulClient)
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+			})
+		})
 
-	svc2.Register(consulClient, []string{"cadet"}, nil)
-	defer svc2.Unregister(consulClient)
+		When("services override the default ACL via tags", func() {
+			BeforeEach(func() {
+				writeACL("deny all", "deny")
+				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow neta"})).To(Succeed())
+				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-	time.Sleep(5 * time.Second)
+			It("respects per-service overrides on both networks", func() {
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
 
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+			})
+		})
 
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
-}
+		When("services allow a group that spans multiple networks", func() {
+			BeforeEach(func() {
+				writeACL("deny all", "deny")
+				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow all"})).To(Succeed())
+				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
+				time.Sleep(propagationDelay)
+			})
 
-func TestACLServiceOverride(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
+			It("allows the group member from every network in it", func() {
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+				ExpectServiceRequest(driverA, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
 
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
-
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
-
-	err = WriteACLConfig(consulClient, []byte(`
-		{
-		    "networks" : {
-		        "neta": ["172.30.1.0/24"],
-		        "netb": ["172.30.2.0/24"]
-		    },
-		    "groups" : {
-		        "all": ["neta", "netb"]
-		    },
-		    "default_policy": "deny all",
-		    "default_action": "deny"
-		}`))
-	testutil.Ok(t, err)
-	defer DeleteACLConfig(consulClient)
-
-	svc1.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-acl": "allow neta"})
-	defer svc1.Unregister(consulClient)
-
-	svc2.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})
-	defer svc2.Unregister(consulClient)
-
-	time.Sleep(5 * time.Second)
-
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
-
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.cadet.internal", 404, "Not Found")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
-}
-
-func TestACLGroup(t *testing.T) {
-	consulClient, err := NewConsulClient("http://127.0.0.1:8500")
-	testutil.Ok(t, err)
-
-	err = WriteCaddyConfig(consulClient, FormatCaddyConfig("http://consul:8500"))
-	testutil.Ok(t, err)
-
-	err = WriteZoneConfig(consulClient)
-	testutil.Ok(t, err)
-
-	err = WriteACLConfig(consulClient, []byte(`
-		{
-		    "networks" : {
-		        "neta": ["172.30.1.0/24"],
-		        "netb": ["172.30.2.0/24"]
-		    },
-		    "groups" : {
-		        "all": ["neta", "netb"]
-		    },
-		    "default_policy": "deny all",
-		    "default_action": "deny"
-		}`))
-	testutil.Ok(t, err)
-	defer DeleteACLConfig(consulClient)
-
-	svc1.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-acl": "allow all"})
-	defer svc1.Unregister(consulClient)
-
-	svc2.Register(consulClient, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})
-	defer svc2.Unregister(consulClient)
-
-	time.Sleep(5 * time.Second)
-
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver1, "https://caddy:443", "svc2.cadet.internal", 404, "Not Found")
-
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
-	ExpectServiceRequest(t, driver2, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
-}
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
+				ExpectServiceRequest(driverB, "https://caddy:443", "svc2.cadet.internal", 200, "svc2")
+			})
+		})
+	})
+})
