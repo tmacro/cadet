@@ -3,10 +3,18 @@ BIN      = bin
 DIST     = dist
 GO       = go
 
-XCADDY := $(BIN)/xcaddy
+XCADDY        := $(BIN)/xcaddy
+DEADCODE      := $(BIN)/deadcode
+STATICCHECK   := $(BIN)/staticcheck
+GOLANGCI_LINT := $(BIN)/golangci-lint
+GOIMPORTS     := $(BIN)/goimports
 
-CADDY_VERSION := v2.10.0
-XCADDY_VERSION := v0.4.5
+CADDY_VERSION         := v2.10.0
+XCADDY_VERSION        := v0.4.5
+DEADCODE_VERSION      := latest
+STATICCHECK_VERSION   := latest
+GOLANGCI_LINT_VERSION := latest
+GOIMPORTS_VERSION     := latest
 
 $(DIST):
 	@mkdir -p $@
@@ -17,7 +25,41 @@ $(BIN):
 $(BIN)/%: | $(BIN)
 	env GOBIN=$(abspath $(BIN)) $(GO) install $(PACKAGE)
 
-$(XCADDY): PACKAGE=github.com/caddyserver/xcaddy/cmd/xcaddy@$(XCADDY_VERSION)
+$(XCADDY):        PACKAGE=github.com/caddyserver/xcaddy/cmd/xcaddy@$(XCADDY_VERSION)
+$(DEADCODE):      PACKAGE=golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION)
+$(STATICCHECK):   PACKAGE=honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
+$(GOLANGCI_LINT): PACKAGE=github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+$(GOIMPORTS):     PACKAGE=golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
+
+.PHONY: install-tools
+install-tools: | $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS)
+
+.PHONY: vet
+vet:
+	@$(GO) vet ./...
+
+.PHONY: deadcode
+deadcode: | $(DEADCODE)
+	@$(DEADCODE) ./...
+
+.PHONY: staticcheck
+staticcheck: | $(STATICCHECK)
+	@$(STATICCHECK) ./...
+
+.PHONY: lint
+lint: | $(GOLANGCI_LINT)
+	@$(GOLANGCI_LINT) run ./...
+
+.PHONY: fmt
+fmt: | $(GOIMPORTS)
+	@$(GOIMPORTS) -w .
+
+.PHONY: tidy
+tidy:
+	@$(GO) mod tidy
+
+.PHONY: check
+check: vet staticcheck deadcode lint
 
 .PHONY: dashboard
 dashboard: | $(DIST)

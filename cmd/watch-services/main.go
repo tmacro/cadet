@@ -12,7 +12,6 @@ import (
 	"github.com/tmacro/cadet/pkg/config"
 
 	"github.com/alecthomas/kong"
-	//	"github.com/hashicorp/consul/api"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 

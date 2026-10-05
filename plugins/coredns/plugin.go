@@ -88,7 +88,6 @@ type Plugin struct {
 
 	cfg *PluginConfig
 
-	rc    config.RemoteConfig
 	ready chan struct{}
 
 	ctx    context.Context

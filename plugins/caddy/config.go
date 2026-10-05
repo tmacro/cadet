@@ -22,33 +22,6 @@ func DefaultAutoReverseProxyConfig() *AutoReverseProxyConfig {
 	}
 }
 
-func MergeAutoReverseProxyConfig(a, b *AutoReverseProxyConfig) *AutoReverseProxyConfig {
-	cfg := AutoReverseProxyConfig{
-		HTTPPort:   a.HTTPPort,
-		HTTPSPort:  a.HTTPSPort,
-		TLSIssuers: a.TLSIssuers,
-		Protocols:  a.Protocols,
-	}
-
-	if b.HTTPPort != 0 {
-		cfg.HTTPPort = b.HTTPPort
-	}
-
-	if b.HTTPSPort != 0 {
-		cfg.HTTPSPort = b.HTTPSPort
-	}
-
-	if b.TLSIssuers != nil {
-		cfg.TLSIssuers = b.TLSIssuers
-	}
-
-	if b.Protocols != nil {
-		cfg.Protocols = b.Protocols
-	}
-
-	return &cfg
-}
-
 type DashboardConfig struct {
 	Enabled bool `json:"enabled"`
 	Port    int  `json:"port"`

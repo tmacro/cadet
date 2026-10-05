@@ -103,7 +103,7 @@ func handleGetIP(w http.ResponseWriter, r *http.Request) {
 func getIP() string {
 	ifaces, err := net.Interfaces()
 	if err != nil {
-		fmt.Print(fmt.Errorf("localAddresses: %+v\n", err.Error()))
+		fmt.Printf("localAddresses: %+v\n", err.Error())
 		return ""
 	}
 
@@ -111,7 +111,7 @@ func getIP() string {
 		if i.Name == "eth0" {
 			addrs, err := i.Addrs()
 			if err != nil {
-				fmt.Print(fmt.Errorf("localAddresses: %+v\n", err.Error()))
+				fmt.Printf("localAddresses: %+v\n", err.Error())
 				return ""
 			}
 

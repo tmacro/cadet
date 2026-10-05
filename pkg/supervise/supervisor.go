@@ -22,26 +22,6 @@ type Named interface {
 	Name() string
 }
 
-type namedService struct {
-	name string
-	svc  Service
-}
-
-func (ns *namedService) Serve(ctx context.Context) error {
-	return ns.svc.Serve(ctx)
-}
-
-func (ns *namedService) Name() string {
-	return ns.name
-}
-
-func WithName(name string, svc Service) Service {
-	return &namedService{
-		name: name,
-		svc:  svc,
-	}
-}
-
 func Serve(ctx context.Context, services ...Service) error {
 	ctx, cancel := context.WithCancel(ctx)
 	errors := make(chan error, len(services))

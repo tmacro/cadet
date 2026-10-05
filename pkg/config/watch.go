@@ -104,7 +104,7 @@ func (w *Watcher) Ready() bool {
 	globalMu.
 		RLock()
 	defer globalMu.RUnlock()
-	return globalNeedsInit == false
+	return !globalNeedsInit
 }
 
 func (w *Watcher) Services() service.Map {

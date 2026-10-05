@@ -1,7 +1,6 @@
 package webui
 
 import (
-    "fmt"
     "io/fs"
     "net/http"
 
@@ -9,15 +8,6 @@ import (
 
     "github.com/tmacro/cadet/pkg/log"
 )
-
-type fsSpy struct {
-    fs fs.FS
-}
-
-func (spy *fsSpy) Open(name string) (fs.File, error) {
-    fmt.Println("opening", name)
-    return spy.fs.Open(name)
-}
 
 func Router(staticAssets fs.FS) http.Handler {
     r := mux.NewRouter()

@@ -98,6 +98,9 @@ func (svc *TestService) Register(client *capi.Client, tags []string, meta map[st
 	}
 
 	matches, _, err := client.Catalog().Service(svc.Name, svc.UID, nil)
+	if err != nil {
+		return err
+	}
 	if len(matches) != 1 {
 		return fmt.Errorf("unexpected response from catalog")
 	}

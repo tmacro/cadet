@@ -23,18 +23,6 @@ func accessHandler(r *http.Request, status, size int, duration time.Duration) {
 	//		Msg("got request")
 }
 
-type contextKey string
-
-const loggerKey contextKey = "logger"
-
-//func withLogger(next http.Handler) http.Handler {
-//	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-//		l := log.With().Logger()
-//		r = r.WithContext(l.WithContext(r.Context()))
-//		next.ServeHTTP(w, r)
-//	})
-//}
-
 func RequestLogger(next http.Handler) http.Handler {
 	return hlog.AccessHandler(accessHandler)(next)
 }

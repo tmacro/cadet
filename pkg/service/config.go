@@ -136,27 +136,6 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func FromJSON(data []byte) (*Config, error) {
-	var cfg Config
-	err := (&cfg).UnmarshalJSON(data)
-	if err != nil {
-		return nil, err
-	}
-
-	if cfg.ID == "" && cfg.Name == "" {
-		return nil, errors.New("no ID or Name defined")
-	}
-
-	if cfg.Name == "" {
-		cfg.Name = cfg.ID
-	}
-
-	if cfg.Type.IsEmpty() {
-		cfg.Type = HTTP
-	}
-
-	return &cfg, nil
-}
 
 type Map map[string]*Config
 
