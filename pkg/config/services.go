@@ -8,8 +8,8 @@ import (
 
 	"github.com/hashicorp/consul/api"
 
-	"github.com/tmacro/cadet/pkg/watch"
 	"github.com/tmacro/cadet/pkg/service"
+	"github.com/tmacro/cadet/pkg/watch"
 )
 
 func WatchConsulCatalog(catalog *api.Catalog, cfg service.ExtractConfig) watch.Watchable[service.Map] {

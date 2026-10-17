@@ -190,7 +190,7 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 		case svcMap := <-staticServiceUpdates:
 			log.Debug("got static service update")
 			globalMu.Lock()
-			isUpdate := !(len(globalStaticServices) == 0 && len(svcMap) == 0)
+			isUpdate := len(globalStaticServices) != 0 || len(svcMap) != 0
 			globalStaticServices = svcMap
 			globalMu.Unlock()
 			if isUpdate {
