@@ -94,13 +94,14 @@ func FromConsulInstances(tags []string, instances []*api.CatalogService, extrCfg
 
 		useProxyValue, ok := instance.ServiceMeta[extrCfg.UseProxyKey]
 		if ok {
-			if useProxyValue == "false" {
+			switch useProxyValue {
+			case "false":
 				useProxy = false
-			} else if useProxyValue == "true" {
+			case "true":
 				if !useProxy {
 					return nil, fmt.Errorf("conflicting use_proxy values: true and false")
 				}
-			} else {
+			default:
 				return nil, fmt.Errorf("invalid use_proxy value: %s", useProxyValue)
 			}
 		}
