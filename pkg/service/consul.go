@@ -40,17 +40,13 @@ func FromConsulInstances(tags []string, instances []*api.CatalogService, extrCfg
 		return nil, nil
 	}
 
-	noPublish := false
-	if slices.Contains(tags, extrCfg.NoPublishTag) {
-		noPublish = true
-	}
-
 	svcID := ""
 	svcName := ""
 	zones := make([]string, 0)
 	endpoints := make(EndpointList, 0)
 	aclPolicy := ""
 	useProxy := true
+	noPublish := slices.Contains(tags, extrCfg.NoPublishTag)
 
 	for _, instance := range instances {
 		if svcID != "" && svcID != instance.ServiceName {
