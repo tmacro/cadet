@@ -17,7 +17,7 @@ func (p Policy) String() string {
 	for _, control := range p {
 		str += control.String() + "; "
 	}
-	return str[:len(str)-1] // Remove trailing semicolon
+	return str[:len(str)-2] // Remove trailing "; "
 }
 
 func (p Policy) IsValid() bool {
