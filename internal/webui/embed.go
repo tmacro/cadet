@@ -2,7 +2,6 @@ package webui
 
 import (
 	"embed"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,9 +15,7 @@ type AssetDir struct {
 var _ fs.FS = (*AssetDir)(nil)
 
 func (ad *AssetDir) Open(name string) (fs.File, error) {
-	path := filepath.Join(ad.prefix, name)
-	fmt.Println(path)
-	return ad.fs.Open(path)
+	return ad.fs.Open(filepath.Join(ad.prefix, name))
 }
 
 func AssetsFromPath(path string) fs.FS {

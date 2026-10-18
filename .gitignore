@@ -1,3 +1,4 @@
 ./e2e/e2e_*
 dist/
 bin/
+build/

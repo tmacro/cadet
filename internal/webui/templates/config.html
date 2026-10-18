@@ -1,0 +1,76 @@
+{{ define "content" }}
+<h1 class="mb-4 text-xl font-semibold">Global config</h1>
+
+<div class="grid gap-6 lg:grid-cols-2">
+    <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-800">Zones</h2>
+        {{ if .Zones }}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+            {{ range .Zones }}
+            <li class="flex items-center gap-2 px-4 py-2.5 text-sm">
+                <span class="font-mono">{{ .Name }}</span>
+                {{ if .Default }}<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">default</span>{{ end }}
+                <span class="ml-auto text-xs text-slate-500 dark:text-slate-400">{{ .Services }} service{{ if ne .Services 1 }}s{{ end }}</span>
+            </li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p class="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">No zones configured.</p>
+        {{ end }}
+        {{ if not .DefaultZone }}
+        <p class="border-t border-slate-100 px-4 py-2.5 text-xs text-amber-700 dark:border-slate-800 dark:text-amber-400">No default zone set; services without <span class="font-mono">cadet-zone</span> are not published.</p>
+        {{ else if .DefaultZoneMissing }}
+        <p class="border-t border-slate-100 px-4 py-2.5 text-xs text-amber-700 dark:border-slate-800 dark:text-amber-400">Default zone <span class="font-mono">{{ .DefaultZone }}</span> is not in the zone list.</p>
+        {{ end }}
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-800">Default ACL</h2>
+        <dl class="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-3 px-4 py-3 text-sm">
+            <dt class="text-slate-500 dark:text-slate-400">Policy</dt>
+            <dd>{{ template "policy" .DefaultPolicy }}</dd>
+            <dt class="text-slate-500 dark:text-slate-400">Fallback action</dt>
+            <dd><span class="rounded px-1.5 py-0.5 font-mono text-xs {{ if eq .DefaultAction "allow" }}bg-emerald-50 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300{{ else }}bg-rose-50 text-rose-800 dark:bg-rose-950 dark:text-rose-300{{ end }}">{{ .DefaultAction }}</span></dd>
+        </dl>
+        <p class="border-t border-slate-100 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            Controls are evaluated top to bottom; <span class="font-mono">*</span> matches every source. Services can override the policy with <span class="font-mono">cadet-acl</span> meta.
+        </p>
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-800">Networks</h2>
+        {{ if .Networks }}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+            {{ range .Networks }}
+            <li class="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
+                <span class="w-28 font-medium">{{ .Name }}</span>
+                <span class="flex flex-wrap gap-1 font-mono text-xs">
+                    {{ range .CIDRs }}<span class="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">{{ . }}</span>{{ end }}
+                </span>
+            </li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p class="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">No networks defined.</p>
+        {{ end }}
+    </section>
+
+    <section class="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <h2 class="border-b border-slate-200 px-4 py-3 text-sm font-semibold dark:border-slate-800">Groups</h2>
+        {{ if .Groups }}
+        <ul class="divide-y divide-slate-100 dark:divide-slate-800">
+            {{ range .Groups }}
+            <li class="flex flex-wrap items-baseline gap-x-4 gap-y-1 px-4 py-2.5 text-sm">
+                <span class="w-28 font-medium">{{ .Name }}</span>
+                <span class="flex flex-wrap gap-1 text-xs">
+                    {{ range .Networks }}<span class="rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800">{{ . }}</span>{{ end }}
+                </span>
+            </li>
+            {{ end }}
+        </ul>
+        {{ else }}
+        <p class="px-4 py-3 text-sm text-slate-500 dark:text-slate-400">No groups defined.</p>
+        {{ end }}
+    </section>
+</div>
+{{ end }}

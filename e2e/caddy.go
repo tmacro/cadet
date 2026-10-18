@@ -31,6 +31,10 @@ const CaddyConfigTemplate = `{
         "https_port": 443,
         "protocols": ["h1"],
         "tls_issuers": []
+      },
+      "dashboard": {
+        "enabled": true,
+        "name": "dashboard"
       }
     },
     "tls": {

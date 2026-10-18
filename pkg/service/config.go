@@ -36,6 +36,30 @@ func (s ServiceType) IsEmpty() bool {
 	return s == ServiceType("")
 }
 
+// Handler names a built-in cadet handler that serves a service's route in
+// place of reverse-proxying to its endpoints.
+type Handler string
+
+const (
+	// NoHandler services are reverse-proxied to their endpoints.
+	NoHandler Handler = ""
+	// DashboardHandler services are served by the cadet web UI.
+	DashboardHandler Handler = "dashboard"
+)
+
+func (h Handler) String() string {
+	return string(h)
+}
+
+func (h Handler) IsValid() bool {
+	switch h {
+	case NoHandler, DashboardHandler:
+		return true
+	default:
+		return false
+	}
+}
+
 type Endpoint struct {
 	Address net.IP
 	Port    uint16
@@ -89,6 +113,7 @@ type Config struct {
 	ACLs      acl.Policy   `json:"acls"`
 	NoPublish bool         `json:"no_publish"`
 	UseProxy  bool         `json:"use_proxy"`
+	Handler   Handler      `json:"-"`
 }
 
 func (c *Config) MarshalZerologObject(u *zerolog.Event) {
@@ -96,6 +121,7 @@ func (c *Config) MarshalZerologObject(u *zerolog.Event) {
 	u.Str("name", c.Name)
 	u.Bool("no_publish", c.NoPublish)
 	u.Bool("use_proxy", c.UseProxy)
+	u.Str("handler", c.Handler.String())
 	u.Array("endpoints", &c.Endpoints)
 	u.Strs("zones", c.Zones)
 }

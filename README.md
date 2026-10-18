@@ -79,6 +79,27 @@ Every field under `cadet.consul` has a default; the minimal form is just
 }
 ```
 
+### Dashboard
+
+Setting `dashboard` in the cadet app config publishes the web UI as a
+service: it gets a hostname, TLS and ACLs like any other proxied service, but
+is served by caddy itself rather than proxied to an upstream.
+
+```json
+"dashboard": {
+  "enabled": true,
+  "name": "cadet",
+  "zones": ["cadet.internal"],
+  "acl": "allow trusted"
+}
+```
+
+`name` defaults to `cadet`, `zones` to the default zone and `acl` to the
+global default policy, so `{"enabled": true}` publishes the dashboard at
+`cadet.<default_zone>`. The service exists only in caddy, so CoreDNS doesn't
+answer for it; point the hostname at the proxy yourself (or register a
+matching service in consul).
+
 ### Zone — `consul kv put cadet/zone.json ...`
 
 ```json
@@ -123,8 +144,33 @@ Services can override the global policy per-registration with
 ## Building
 
 ```sh
-make install-tools   # one-time: xcaddy, ginkgo, linters
+make help            # list documented targets
+make check           # formatting, go.mod, lint and stylesheet checks
+make test            # unit tests (everything but ./e2e)
+make e2e             # end-to-end suite against a docker compose stack
 make caddy           # ./dist/caddy with the cadet plugin baked in
-make caddy-docker    # tmacro/cadet-proxy:latest
-make coredns-docker  # tmacro/cadet-dns:latest
+make coredns         # ./dist/coredns with the cadet plugin baked in
+make dashboard       # ./dist/cadet-dashboard, the standalone dashboard
+make css             # regenerate the dashboard stylesheet (css-watch to rebuild on change)
+make caddy-docker    # tmacro/cadet-proxy, tagged with `git describe`
+make coredns-docker  # tmacro/cadet-dns, tagged with `git describe`
 ```
+
+`make fmt` and `make tidy` fix what `check-fmt` and `check-tidy` complain
+about; `make check-css` fails when the committed stylesheet is out of date
+with the templates. `make e2e-up` / `make e2e-down` start and stop the e2e
+stack on their own, which is handy for iterating on single specs.
+
+Pinned tools (xcaddy, golangci-lint, goimports, staticcheck, deadcode,
+ginkgo, tailwind) install into `./bin` on first use, or all at once with
+`make tools`. Caddy, CoreDNS and Ginkgo versions are read from `go.mod`.
+Go, Docker (with buildx and compose) and curl need to be installed.
+
+Images build for `linux/amd64` by default; override `DOCKER_PLATFORMS` for
+other targets, e.g. `make caddy-docker DOCKER_PLATFORMS=linux/arm64`.
+`make coredns` unpacks the upstream CoreDNS source into `./build` once per
+version and builds it against this checkout, using the plugin list in
+`images/coredns/plugin.cfg`.
+
+`make clean` removes `./dist` and `./build`; `make fclean` also removes the
+tools in `./bin`.

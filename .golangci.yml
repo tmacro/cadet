@@ -1,0 +1,16 @@
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (net/http.ResponseWriter).Write
+        - (*go.uber.org/zap.Logger).Sync
+  exclusions:
+    presets:
+      # Unchecked Close/Write/Sync on deferred and response-writer calls.
+      - std-error-handling
+    rules:
+      # Ginkgo and Gomega are written to be dot-imported.
+      - path: ^e2e/
+        text: "ST1001: should not use dot imports"

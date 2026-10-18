@@ -1,0 +1,72 @@
+{{ define "content" }}
+<div class="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-2">
+    <h1 class="text-xl font-semibold">Services</h1>
+    <div class="flex flex-wrap gap-2 text-xs">
+        {{ range .Counts }}
+        <span class="inline-flex items-center gap-1.5">{{ template "status" .Status }}<span class="text-slate-500 dark:text-slate-400">{{ .Count }}</span></span>
+        {{ end }}
+    </div>
+</div>
+
+{{ if .Services }}
+<div class="overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+    <table class="w-full text-left text-sm">
+        <thead class="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">
+            <tr>
+                <th class="px-4 py-2 font-medium">Service</th>
+                <th class="px-4 py-2 font-medium">Status</th>
+                <th class="px-4 py-2 font-medium">Hostnames</th>
+                <th class="px-4 py-2 font-medium">Endpoints</th>
+                <th class="px-4 py-2 font-medium">ACL</th>
+            </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+            {{ range .Services }}
+            <tr class="align-top {{ if eq .Status "unpublished" }}text-slate-400 dark:text-slate-500{{ end }}">
+                <td class="px-4 py-3">
+                    <div class="font-medium">{{ .Name }}</div>
+                    <div class="text-xs text-slate-500 dark:text-slate-400">
+                        {{ if ne .ID .Name }}<span class="font-mono">{{ .ID }}</span> · {{ end }}{{ .Type }}
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    {{ template "status" .Status }}
+                    {{ range .Warnings }}
+                    <div class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ . }}</div>
+                    {{ end }}
+                </td>
+                <td class="px-4 py-3 font-mono text-xs">
+                    {{ range .Hostnames }}
+                    <div>{{ . }}</div>
+                    {{ else }}<span class="text-slate-400">—</span>{{ end }}
+                </td>
+                <td class="px-4 py-3 font-mono text-xs">
+                    {{ range .Endpoints }}<div>{{ . }}</div>{{ else }}<span class="text-slate-400">—</span>{{ end }}
+                </td>
+                <td class="px-4 py-3">
+                    {{ template "policy" .Policy }}
+                    {{ if .PolicyInherited }}<div class="mt-1 text-xs text-slate-400">global default</div>{{ end }}
+                </td>
+            </tr>
+            {{ end }}
+        </tbody>
+    </table>
+</div>
+{{ else }}
+<div class="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+    No services carry the cadet tag yet.
+</div>
+{{ end }}
+{{ end }}
+
+{{ define "status" }}
+{{ if eq . "proxied" }}
+<span class="inline-block rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" title="Reverse-proxied by caddy; DNS points at the proxy">proxied</span>
+{{ else if eq . "direct" }}
+<span class="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800 dark:bg-sky-900 dark:text-sky-200" title="Bypasses the proxy; DNS points at the service endpoints">direct</span>
+{{ else if eq . "invalid" }}
+<span class="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900 dark:text-amber-200" title="Published but cannot be served">invalid</span>
+{{ else }}
+<span class="inline-block rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300" title="Tagged no-publish">unpublished</span>
+{{ end }}
+{{ end }}

@@ -30,3 +30,11 @@ func TemplatesFromContext(ctx context.Context, name ...string) (*template.Templa
 func ContextWithRemoteConfig(ctx context.Context, rc config.RemoteConfig) context.Context {
 	return context.WithValue(ctx, remoteConfigKey, rc)
 }
+
+func RemoteConfigFromContext(ctx context.Context) (config.RemoteConfig, error) {
+	rc, ok := ctx.Value(remoteConfigKey).(config.RemoteConfig)
+	if !ok {
+		return nil, fmt.Errorf("remote config not found in context")
+	}
+	return rc, nil
+}

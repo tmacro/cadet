@@ -3,6 +3,7 @@ package cadet
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net"
 	"slices"
 
@@ -92,6 +93,16 @@ func (plug *Plugin) generateCaddyConfig(conf *caddy.Config, services service.Map
 		},
 	}
 
+	if plugConfig.Dashboard.Enabled {
+		dashboard := plugConfig.Dashboard.Service()
+		if _, ok := services[dashboard.ID]; ok {
+			log.Warnf("service %s shadows the dashboard, not publishing the dashboard", dashboard.ID)
+		} else {
+			services = maps.Clone(services)
+			services[dashboard.ID] = dashboard
+		}
+	}
+
 	serviceNames := make([]string, 0, len(services))
 	for name := range services {
 		serviceNames = append(serviceNames, name)
@@ -109,20 +120,30 @@ Outer:
 			continue
 		}
 
-		upstreams := make([]*reverseproxy.Upstream, len(svc.Endpoints))
-		for i, endpoint := range svc.Endpoints {
-			upstreams[i] = &reverseproxy.Upstream{
-				Dial: fmt.Sprintf("%s:%d", endpoint.Address.String(), endpoint.Port),
+		var serviceHandler json.RawMessage
+		switch svc.Handler {
+		case service.NoHandler:
+			upstreams := make([]*reverseproxy.Upstream, len(svc.Endpoints))
+			for i, endpoint := range svc.Endpoints {
+				upstreams[i] = &reverseproxy.Upstream{
+					Dial: fmt.Sprintf("%s:%d", endpoint.Address.String(), endpoint.Port),
+				}
 			}
-		}
 
-		if len(upstreams) == 0 {
-			log.Warnf("no endpoints found for service %s, skipping", svc.ID)
+			if len(upstreams) == 0 {
+				log.Warnf("no endpoints found for service %s, skipping", svc.ID)
+				continue Outer
+			}
+
+			proxyHandler := &reverseproxy.Handler{
+				Upstreams: upstreams,
+			}
+			serviceHandler = caddyconfig.JSONModuleObject(proxyHandler, "handler", "reverse_proxy", nil)
+		case service.DashboardHandler:
+			serviceHandler = caddyconfig.JSONModuleObject(&Dashboard{}, "handler", "cadet_dashboard", nil)
+		default:
+			log.Warnf("unknown handler %q for service %s, skipping", svc.Handler, svc.ID)
 			continue Outer
-		}
-
-		proxyHandler := &reverseproxy.Handler{
-			Upstreams: upstreams,
 		}
 
 		hostnames := make([]string, 0)
@@ -231,9 +252,7 @@ Outer:
 		}
 
 		subroute.Routes = append(subroute.Routes, caddyhttp.Route{
-			HandlersRaw: []json.RawMessage{
-				caddyconfig.JSONModuleObject(proxyHandler, "handler", "reverse_proxy", nil),
-			},
+			HandlersRaw:    []json.RawMessage{serviceHandler},
 			MatcherSetsRaw: caddyhttp.RawMatcherSets{proxyMatchers},
 			Terminal:       true,
 		})

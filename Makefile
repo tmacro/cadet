@@ -3,9 +3,10 @@ SHELL         := bash
 .DEFAULT_GOAL := help
 MAKEFLAGS     += --no-builtin-rules
 
-GO   ?= go
-BIN  := $(CURDIR)/bin
-DIST := $(CURDIR)/dist
+GO    ?= go
+BIN   := $(CURDIR)/bin
+DIST  := $(CURDIR)/dist
+BUILD := $(CURDIR)/build
 
 PROJECT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
@@ -35,11 +36,25 @@ caddy: | $(XCADDY) ## Build ./dist/caddy with the cadet plugin
 		--with github.com/tmacro/cadet/plugins/caddy \
 		--replace github.com/tmacro/cadet=.
 
+# Upstream coredns source, unpacked once per version. The replace directive
+# points it at this checkout so the cadet plugin builds from local sources.
+COREDNS_SRC := $(BUILD)/coredns-$(COREDNS_VERSION)
+
+$(COREDNS_SRC): | $(BUILD)
+	rm -rf $@.tmp && mkdir -p $@.tmp
+	curl -sSfL https://api.github.com/repos/coredns/coredns/tarball/$(COREDNS_VERSION) | tar -xzf - -C $@.tmp --strip-components=1
+	echo "replace github.com/tmacro/cadet => $(CURDIR)" >> $@.tmp/go.mod
+	mv $@.tmp $@
+
 .PHONY: coredns
-coredns:
+coredns: | $(COREDNS_SRC) $(DIST) ## Build ./dist/coredns with the cadet plugin
+	cp images/coredns/plugin.cfg $(COREDNS_SRC)/plugin.cfg
+	$(MAKE) -C $(COREDNS_SRC) gen
+	$(MAKE) -C $(COREDNS_SRC) coredns BINARY=$(DIST)/coredns GOFLAGS=-buildvcs=false
 
 .PHONY: dashboard
-dashboard: ## Build ./dist/cadet-dashboard
+dashboard: | $(DIST) ## Build ./dist/cadet-dashboard
+	$(GO) build -o $(DIST)/cadet-dashboard ./cmd/dashboard
 
 CSS_IN  := internal/webui/tailwind.css
 CSS_OUT := internal/webui/static/css/main.css
@@ -80,6 +95,9 @@ coredns-docker: ## Build coredns docker image
 		-f $(CURDIR)/images/coredns/Dockerfile .
 
 $(DIST):
+	@mkdir -p $@
+
+$(BUILD):
 	@mkdir -p $@
 
 $(BIN):
@@ -130,21 +148,21 @@ fmt: | $(GOIMPORTS) ## Format Go sources
 	$(GOIMPORTS) -w .
 
 .PHONY: vet
-vet:
+vet: ## Run go vet
 	@$(GO) vet ./...
 
 .PHONY: deadcode
-deadcode: | $(DEADCODE)
+deadcode: | $(DEADCODE) ## Report unreachable functions
 	@$(DEADCODE) ./...
 
 .PHONY: staticcheck
-staticcheck: | $(STATICCHECK)
+staticcheck: | $(STATICCHECK) ## Run staticcheck
 	@$(STATICCHECK) ./...
 
 ##@ Checks
 
 .PHONY: lint
-lint: | $(GOLANGCI_LINT)
+lint: | $(GOLANGCI_LINT) ## Run golangci-lint
 	@$(GOLANGCI_LINT) run ./...
 
 .PHONY: check-fmt
@@ -163,7 +181,7 @@ check-css: | $(TAILWIND) ## Fail if the committed stylesheet is stale
 	cmp -s $$tmp $(CSS_OUT) || { echo "$(CSS_OUT) is stale (run make css)"; exit 1; }
 
 .PHONY: check
-check: check-fmt check-tidy lint check-css
+check: check-fmt check-tidy lint check-css ## Run all checks: formatting, go.mod, lint and stylesheet
 
 ##@ Tests
 
@@ -196,12 +214,12 @@ e2e-down: ## Stop and remove the e2e stack
 ci: check test build e2e ## Everything CI runs, in order
 
 .PHONY: clean
-clean: ## Remove build output
-	rm -rf $(BIN) $(DIST)
+clean: ## Remove build output and downloaded sources
+	rm -rf $(DIST) $(BUILD)
 
 .PHONY: fclean
 fclean: | clean ## Remove build output and tools
-	rm -rf $(DIST)
+	rm -rf $(BIN)
 
 .PHONY: help
 help: ## Show this help
