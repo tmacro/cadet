@@ -1,0 +1,17 @@
+name: Setup
+description: Install Go and restore the pinned tools in ./bin
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version-file: go.mod
+
+    # The Makefile only installs a tool when its binary is missing, so the key
+    # must change whenever a pinned version does (Makefile, or go.mod for
+    # ginkgo). No restore-keys: a partial match would keep stale versions.
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: bin
+        key: tools-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Makefile', 'go.mod') }}

@@ -181,6 +181,8 @@ make help            # list documented targets
 make check           # formatting, go.mod, lint and stylesheet checks
 make test            # unit tests (everything but ./e2e)
 make e2e             # end-to-end suite against a docker compose stack
+make ci              # check, test, build and e2e, as CI runs them
+make build           # caddy, coredns and dashboard, all into ./dist
 make caddy           # ./dist/caddy with the cadet plugin baked in
 make coredns         # ./dist/coredns with the cadet plugin baked in
 make dashboard       # ./dist/cadet-dashboard, the standalone dashboard

@@ -28,6 +28,9 @@ GINKGO_VERSION        := $(call gomod_version,github.com/onsi/ginkgo/v2)
 .PHONY: all
 all:
 
+.PHONY: build
+build: caddy coredns dashboard ## Build all binaries into ./dist
+
 .PHONY: caddy
 caddy: | $(XCADDY) ## Build ./dist/caddy with the cadet plugin
 	$(XCADDY) build $(CADDY_VERSION) \
