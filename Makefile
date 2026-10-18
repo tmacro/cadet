@@ -23,6 +23,14 @@ GOIMPORTS_VERSION     := v0.51.0
 TAILWIND_VERSION      := 4.1.12
 GINKGO_VERSION        := $(call gomod_version,github.com/onsi/ginkgo/v2)
 
+XCADDY        := $(BIN)/xcaddy
+DEADCODE      := $(BIN)/deadcode
+STATICCHECK   := $(BIN)/staticcheck
+GOLANGCI_LINT := $(BIN)/golangci-lint
+GOIMPORTS     := $(BIN)/goimports
+GINKGO        := $(BIN)/ginkgo
+TAILWIND      := $(BIN)/tailwindcss
+
 ##@ Build
 
 .PHONY: all
@@ -39,8 +47,6 @@ caddy: | $(XCADDY) ## Build ./dist/caddy with the cadet plugin
 		--with github.com/tmacro/cadet/plugins/caddy \
 		--replace github.com/tmacro/cadet=.
 
-# Upstream coredns source, unpacked once per version. The replace directive
-# points it at this checkout so the cadet plugin builds from local sources.
 COREDNS_SRC := $(BUILD)/coredns-$(COREDNS_VERSION)
 
 $(COREDNS_SRC): | $(BUILD)
@@ -63,11 +69,11 @@ CSS_IN  := internal/webui/tailwind.css
 CSS_OUT := internal/webui/static/css/main.css
 
 .PHONY: css
-css: ## Regenerate the dashboard stylesheet
+css: | $(TAILWIND) ## Regenerate the dashboard stylesheet
 	$(TAILWIND) -i $(CSS_IN) -o $(CSS_OUT)
 
 .PHONY: css-watch
-css-watch: ## Regenerate the dashboard stylesheet on change
+css-watch: | $(TAILWIND) ## Regenerate the dashboard stylesheet on change
 	$(TAILWIND) -i $(CSS_IN) -o $(CSS_OUT) --watch=always
 
 ##@ Images
@@ -109,14 +115,6 @@ $(BIN):
 $(BIN)/%: | $(BIN)
 	env GOBIN=$(abspath $(BIN)) $(GO) install $(PACKAGE)
 
-XCADDY        := $(BIN)/xcaddy
-DEADCODE      := $(BIN)/deadcode
-STATICCHECK   := $(BIN)/staticcheck
-GOLANGCI_LINT := $(BIN)/golangci-lint
-GOIMPORTS     := $(BIN)/goimports
-GINKGO        := $(BIN)/ginkgo
-TAILWIND      := $(BIN)/tailwindcss
-
 $(XCADDY):        PACKAGE=github.com/caddyserver/xcaddy/cmd/xcaddy@$(XCADDY_VERSION)
 $(DEADCODE):      PACKAGE=golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION)
 $(STATICCHECK):   PACKAGE=honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSION)
@@ -146,8 +144,6 @@ tools: | $(TOOLS) ## Install pinned dev tools into ./bin
 tidy: ## Tidy go.mod and go.sum
 	@$(GO) mod tidy
 
-# Package directories of this module; skips ./build, which holds upstream
-# sources with their own go.mod.
 GO_DIRS = $$($(GO) list -f '{{.Dir}}' ./...)
 
 .PHONY: fmt
