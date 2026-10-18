@@ -1,8 +1,10 @@
-FROM golang:alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:alpine AS builder
 
 ARG XCADDY_VERSION=v0.4.5
 
 ARG CADDY_VERSION=v2.11.4
+
+ARG TARGETOS TARGETARCH
 
 RUN apk add --update git
 
@@ -14,8 +16,10 @@ COPY ./pkg /plugin/pkg
 COPY ./internal /plugin/internal
 COPY ./plugins /plugin/plugins
 
-# Build caddy
-RUN xcaddy build ${CADDY_VERSION} \
+# Build caddy, cross-compiling for the target platform
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
+    xcaddy build ${CADDY_VERSION} \
+    --output /go/caddy \
     --with github.com/caddy-dns/cloudflare \
     --with github.com/tmacro/cadet/plugins/caddy \
     --replace github.com/tmacro/cadet=/plugin
