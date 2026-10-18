@@ -2,6 +2,12 @@
 services:
   consul:
     image: consul:1.15.4
+    # Lets `compose up --wait` block until consul has elected a leader.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:8500/v1/status/leader | grep -q :"]
+      interval: 1s
+      timeout: 2s
+      retries: 30
     ports:
       - 8500:8500
       - 8600:8600/tcp
