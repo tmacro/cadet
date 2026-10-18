@@ -2,10 +2,10 @@ package httpserver
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"time"
-	"errors"
 
 	"github.com/rs/zerolog/log"
 

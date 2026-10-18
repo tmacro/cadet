@@ -2,8 +2,9 @@ package supervise
 
 import (
 	"context"
-	"github.com/rs/zerolog/log"
 	"sync"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/hashicorp/go-multierror"
 )

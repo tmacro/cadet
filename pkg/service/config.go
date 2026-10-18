@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/rs/zerolog"
-	
+
 	"github.com/tmacro/cadet/pkg/acl"
 )
 
@@ -135,7 +135,6 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 
 	return nil
 }
-
 
 type Map map[string]*Config
 

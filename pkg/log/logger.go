@@ -3,7 +3,7 @@ package log
 import (
 	"os"
 	"sync"
-	
+
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
