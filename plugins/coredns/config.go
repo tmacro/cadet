@@ -85,6 +85,12 @@ func ParseConfig(c *caddy.Controller) (*PluginConfig, error) {
 				}
 				cfg.Consul.Keys.ACL = args[0]
 
+			case "proxy_key":
+				if len(args) != 1 {
+					return nil, c.Err("expected exactly one proxy key")
+				}
+				cfg.Consul.Keys.Proxy = args[0]
+
 			default:
 				return nil, c.Errf("unknown option '%s'", val)
 			}

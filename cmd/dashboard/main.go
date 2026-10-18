@@ -34,7 +34,7 @@ var CLI struct {
 	URL                string `help:"Consul endpoint to connect to." default:"http://localhost:8500"`
 	GlobalConfigPrefix string `help:"Consul global config prefix." default:"cadet"`
 	ServiceTag         string `help:"Service tag to watch for." default:"cadet"`
-	NoPublishTag       string `help:"Service tag to not publish." default:"cadet-no-publish"`
+	NoPublishTag       string `help:"Service tag to not publish." default:"cadet-nopublish"`
 
 	ZoneKey     string `help:"Consul metadata key for zone." default:"cadet-zone"`
 	ACLKey      string `help:"Consul metadata key for ACL." default:"cadet-acl"`

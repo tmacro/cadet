@@ -22,13 +22,46 @@ controlled by meta keys on the registration:
 | `cadet-name`           | override the hostname (default: service name)              |
 | `cadet-zone`           | publish into this zone instead of the default              |
 | `cadet-acl`            | ACL policy for this service, overriding the global default |
-| tag `cadet-no-publish` | skip this instance even though it carries the `cadet` tag  |
+| `cadet-proxy`          | `false` points DNS straight at the service instead of the proxy, and skips the proxy route |
+| tag `cadet-nopublish`  | skip the whole service even though it carries the `cadet` tag |
 
 Global config lives in consul under `cadet/`:
 
 - `cadet/caddy.json` — the Caddy app config
 - `cadet/zone.json`  — default zone and zone list
 - `cadet/acl.json`   — ACL networks, groups, and default policy/action
+- `cadet/services/`  — static services, one JSON document per key
+
+### Static services
+
+Services that can't register in the consul catalog can be declared in the KV
+store instead. Each key under `cadet/services/` holds one service:
+
+```sh
+consul kv put cadet/services/nas '{
+  "id": "nas",
+  "name": "files",
+  "endpoints": [
+    { "address": "10.10.0.20", "port": 5000 },
+    { "address": "10.10.0.21", "port": 5000 }
+  ],
+  "zones": ["lab.internal"],
+  "acls": "allow admin; deny *"
+}'
+```
+
+| field        | effect                                                                 |
+| ------------ | ---------------------------------------------------------------------- |
+| `id`         | unique service ID                                                      |
+| `name`       | hostname to publish under                                              |
+| `endpoints`  | upstreams to proxy to, as `address` (an IP) and `port`                 |
+| `zones`      | zones to publish into (default: the default zone)                      |
+| `acls`       | ACL policy, same syntax as `cadet-acl` (default: the global policy)    |
+| `no_publish` | skip this service (default: `false`)                                   |
+| `use_proxy`  | `false` points DNS straight at the endpoints instead of the proxy (default: `true`) |
+
+Services are keyed by `id`, not by KV key. A catalog service with the same ID
+takes precedence over a static one.
 
 ## Example configs
 

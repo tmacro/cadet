@@ -143,9 +143,13 @@ tools: | $(TOOLS) ## Install pinned dev tools into ./bin
 tidy: ## Tidy go.mod and go.sum
 	@$(GO) mod tidy
 
+# Package directories of this module; skips ./build, which holds upstream
+# sources with their own go.mod.
+GO_DIRS = $$($(GO) list -f '{{.Dir}}' ./...)
+
 .PHONY: fmt
 fmt: | $(GOIMPORTS) ## Format Go sources
-	$(GOIMPORTS) -w .
+	$(GOIMPORTS) -w $(GO_DIRS)
 
 .PHONY: vet
 vet: ## Run go vet
@@ -167,7 +171,7 @@ lint: | $(GOLANGCI_LINT) ## Run golangci-lint
 
 .PHONY: check-fmt
 check-fmt: | $(GOIMPORTS) ## Fail if Go sources need formatting
-	@out=$$($(GOIMPORTS) -l .); \
+	@out=$$($(GOIMPORTS) -l $(GO_DIRS)); \
 	if [ -n "$$out" ]; then echo "needs formatting (run make fmt):"; echo "$$out"; exit 1; fi
 
 .PHONY: check-tidy

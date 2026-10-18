@@ -107,6 +107,9 @@ func (c *ConsulConfig) UnmarshalJSON(data []byte) error {
 		if raw.Keys.ACL != "" {
 			keys.ACL = raw.Keys.ACL
 		}
+		if raw.Keys.Proxy != "" {
+			keys.Proxy = raw.Keys.Proxy
+		}
 	}
 
 	c.Keys = keys
