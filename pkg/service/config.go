@@ -133,6 +133,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 		Name      string       `json:"name"`
 		Endpoints EndpointList `json:"endpoints"`
 		Zones     []string     `json:"zones"`
+		ACLs      acl.Policy   `json:"acls"`
 		NoPublish *bool        `json:"no_publish"`
 		UseProxy  *bool        `json:"use_proxy"`
 	}
@@ -146,6 +147,7 @@ func (c *Config) UnmarshalJSON(data []byte) error {
 	c.Name = raw.Name
 	c.Endpoints = raw.Endpoints
 	c.Zones = raw.Zones
+	c.ACLs = raw.ACLs
 
 	if raw.NoPublish != nil {
 		c.NoPublish = *raw.NoPublish
