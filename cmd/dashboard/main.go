@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"io/fs"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,7 +40,7 @@ var CLI struct {
 	ACLKey      string `help:"Consul metadata key for ACL." default:"cadet-acl"`
 	NameKey     string `help:"Consul metadata key for name." default:"cadet-name"`
 	TargetKey   string `help:"Consul metadata key for target." default:"cadet-target"`
-	UseProxyKey string `help:"Consul metadata key for Disabling proxying." default:"cadet-use-proxy"`
+	UseProxyKey string `help:"Consul metadata key for Disabling proxying." default:"cadet-proxy"`
 }
 
 func main() {
@@ -82,7 +82,10 @@ func main() {
 
 	log.Infof("Starting cadet dashboard")
 
-	catalog, kv, err := consul.CreateClient("http", "10.40.0.5:8500", "")
+	endpoint, err := url.Parse(CLI.URL)
+	cmd.FatalIfErrorf(err, "invalid consul endpoint")
+
+	catalog, kv, err := consul.CreateClient(endpoint.Scheme, endpoint.Host, "")
 	cmd.FatalIfErrorf(err, "failed to create consul client: %v")
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -99,12 +102,9 @@ func main() {
 
 	watcher := config.NewWatcher(onChange, onError)
 
-	ctx = webui.ContextWithRemoteConfig(ctx, watcher)
-
+	templates := webui.EmbeddedTemplates
 	if CLI.Templates != "" {
-		ctx = webui.ContextWithTemplates(ctx, webui.TemplateCacheFromPath(CLI.Templates, webui.NoCache))
-	} else {
-		ctx = webui.ContextWithTemplates(ctx, webui.EmbeddedTemplates)
+		templates = webui.TemplateCacheFromPath(CLI.Templates, webui.NoCache)
 	}
 
 	var staticAssets fs.FS
@@ -118,7 +118,7 @@ func main() {
 		supervise.ServiceFunc(func(ctx context.Context) error {
 			return watcher.Run(ctx, catalog, kv, CLI.GlobalConfigPrefix, extractCfg)
 		}),
-		httpserver.Server(CLI.Addr, webui.Router(staticAssets), httpserver.RequestLogger),
+		httpserver.Server(CLI.Addr, webui.NewHandler(watcher, templates, staticAssets), httpserver.RequestLogger),
 	}
 
 	err = supervise.Serve(ctx, services...)
@@ -126,51 +126,13 @@ func main() {
 }
 
 func onChange(rc config.RemoteConfig) bool {
-	if !rc.Ready() {
-		return true
+	if rc.Ready() {
+		log.Debugf("config updated: %d services", len(rc.Services()))
 	}
-
-	svcMap := rc.Services()
-	zoneCfg := rc.Zone()
-	printServices(zoneCfg.DefaultZone, svcMap)
 	return true
 }
 
 func onError(err error) (time.Duration, bool) {
 	log.Error(err)
 	return 0, false
-}
-
-func printServices(defaultZone string, svcMap service.Map) {
-	for _, svc := range svcMap {
-		fmt.Println("Service:", svc.ID)
-		fmt.Printf("\tType: %s\n", svc.Type)
-		fmt.Printf("\tName: %s\n", svc.Name)
-		if len(svc.Endpoints) > 0 {
-			fmt.Println("\tEndpoints:")
-			for _, ep := range svc.Endpoints {
-				fmt.Printf("\t\t%s\n", ep)
-			}
-		} else {
-			fmt.Println("\tEndpoints: No Endpoints")
-		}
-
-		fmt.Println("\tZones:")
-		if len(svc.Zones) > 0 {
-			for _, zone := range svc.Zones {
-				fmt.Printf("\t\t%s\n", zone)
-			}
-		} else {
-			fmt.Printf("\t\t%s\n", defaultZone)
-		}
-
-		policy := svc.ACLs
-		if policy.IsEmpty() {
-			policy = config.DefaultACLPolicy
-		}
-		fmt.Printf("\tACL Policy: %s\n", policy)
-		fmt.Printf("\tPublish: %v\n", !svc.NoPublish)
-		fmt.Printf("\tUse Proxy: %v\n", svc.UseProxy)
-		fmt.Println()
-	}
 }
