@@ -1,17 +1,10 @@
 package e2e
 
 import (
-	"time"
-
 	capi "github.com/hashicorp/consul/api"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-// propagationDelay is how long we wait after mutating consul state before
-// expecting Caddy to have reconciled. The underlying watch loop polls at a
-// coarse interval; this gives it room to converge.
-const propagationDelay = 5 * time.Second
 
 // Drivers are external helpers running on each test network; they issue the
 // actual HTTP request from inside their network namespace so we can assert on
@@ -64,7 +57,7 @@ var _ = Describe("Cadet proxy", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 			Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 		})
 
 		It("routes requests from network A to both services", func() {
@@ -83,7 +76,7 @@ var _ = Describe("Cadet proxy", func() {
 			meta := map[string]string{"cadet-zone": "alternate.internal"}
 			Expect(svc1.Register(consul, []string{"cadet"}, meta)).To(Succeed())
 			Expect(svc2.Register(consul, []string{"cadet"}, meta)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 		})
 
 		It("serves the alternate hostname from network A", func() {
@@ -107,7 +100,7 @@ var _ = Describe("Cadet proxy", func() {
 		When("the service is tagged with the no-publish tag", func() {
 			BeforeEach(func() {
 				Expect(svc1.Register(consul, []string{"cadet", "cadet-no-publish"}, nil)).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("does not publish the service", func() {
@@ -120,7 +113,7 @@ var _ = Describe("Cadet proxy", func() {
 				// Nothing but the per-spec UID tag — so the plugin's
 				// `service` tag filter rejects this registration.
 				Expect(svc1.Register(consul, nil, nil)).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("does not publish the service", func() {
@@ -132,7 +125,7 @@ var _ = Describe("Cadet proxy", func() {
 	Context("when a service overrides its hostname via cadet-name", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-name": "aliased"})).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 		})
 
 		It("serves the service at the aliased hostname", func() {
@@ -147,7 +140,7 @@ var _ = Describe("Cadet proxy", func() {
 	Context("when the service catalog changes", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 		})
 
 		It("stops routing to a service after it is unregistered", func() {
@@ -156,7 +149,7 @@ var _ = Describe("Cadet proxy", func() {
 			ExpectServiceRequest(driverA, "https://caddy:443", "svc1.cadet.internal", 200, "svc1")
 
 			Expect(svc1.Unregister(consul)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 
 			ExpectHostUnreachable(driverA, "https://caddy:443", "svc1.cadet.internal")
 		})
@@ -183,7 +176,7 @@ var _ = Describe("Cadet proxy", func() {
 			}
 			Expect(inst1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 			Expect(inst2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleProxy(consul)
 		})
 
 		AfterEach(func() {
@@ -236,7 +229,7 @@ var _ = Describe("Cadet proxy", func() {
 				writeACL("allow neta", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("allows network A and denies network B", func() {
@@ -253,7 +246,7 @@ var _ = Describe("Cadet proxy", func() {
 				writeACL("deny neta", "allow")
 				Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("denies network A and allows network B", func() {
@@ -270,7 +263,7 @@ var _ = Describe("Cadet proxy", func() {
 				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow neta"})).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("respects per-service overrides on both networks", func() {
@@ -287,7 +280,7 @@ var _ = Describe("Cadet proxy", func() {
 				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow all"})).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, map[string]string{"cadet-acl": "allow netb"})).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleProxy(consul)
 			})
 
 			It("allows the group member from every network in it", func() {

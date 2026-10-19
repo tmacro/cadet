@@ -1,8 +1,6 @@
 package e2e
 
 import (
-	"time"
-
 	capi "github.com/hashicorp/consul/api"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -83,7 +81,7 @@ var _ = Describe("Cadet DNS", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 			Expect(svc2.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 		})
 
 		It("resolves proxied services to the proxy from network A", func() {
@@ -103,7 +101,7 @@ var _ = Describe("Cadet DNS", func() {
 		BeforeEach(func() {
 			meta := map[string]string{"cadet-zone": "alternate.internal"}
 			Expect(svc1.Register(consul, []string{"cadet"}, direct(meta))).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 		})
 
 		It("resolves the alternate hostname", func() {
@@ -126,7 +124,7 @@ var _ = Describe("Cadet DNS", func() {
 		When("the service is tagged with the no-publish tag", func() {
 			BeforeEach(func() {
 				Expect(svc1.Register(consul, []string{"cadet", "cadet-no-publish"}, direct(nil))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("does not resolve the service", func() {
@@ -137,7 +135,7 @@ var _ = Describe("Cadet DNS", func() {
 		When("the service is missing the cadet tag", func() {
 			BeforeEach(func() {
 				Expect(svc1.Register(consul, nil, direct(nil))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("does not resolve the service", func() {
@@ -149,7 +147,7 @@ var _ = Describe("Cadet DNS", func() {
 	Context("when a service overrides its hostname via cadet-name", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, direct(map[string]string{"cadet-name": "aliased"}))).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 		})
 
 		It("resolves the aliased hostname", func() {
@@ -164,14 +162,14 @@ var _ = Describe("Cadet DNS", func() {
 	Context("when the service catalog changes", func() {
 		BeforeEach(func() {
 			Expect(svc1.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 		})
 
 		It("stops resolving a service after it is unregistered", func() {
 			ExpectRecords(resolverA, dnsServer, "svc1.cadet.internal", svc1IP)
 
 			Expect(svc1.Unregister(consul)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 
 			ExpectNoRecords(resolverA, dnsServer, "svc1.cadet.internal")
 		})
@@ -193,7 +191,7 @@ var _ = Describe("Cadet DNS", func() {
 		It("returns a record for every direct instance", func() {
 			Expect(inst1.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
 			Expect(inst2.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 
 			ExpectRecords(resolverA, dnsServer, "pool.cadet.internal", svc1IP, svc2IP)
 		})
@@ -201,7 +199,7 @@ var _ = Describe("Cadet DNS", func() {
 		It("returns only the proxy for proxied instances", func() {
 			Expect(inst1.Register(consul, []string{"cadet"}, nil)).To(Succeed())
 			Expect(inst2.Register(consul, []string{"cadet"}, nil)).To(Succeed())
-			time.Sleep(propagationDelay)
+			SettleDNS(consul)
 
 			ExpectRecords(resolverA, dnsServer, "pool.cadet.internal", proxyIP)
 		})
@@ -233,7 +231,7 @@ var _ = Describe("Cadet DNS", func() {
 			BeforeEach(func() {
 				writeACL("allow neta", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("answers network A and not network B", func() {
@@ -246,7 +244,7 @@ var _ = Describe("Cadet DNS", func() {
 			BeforeEach(func() {
 				writeACL("deny neta", "allow")
 				Expect(svc1.Register(consul, []string{"cadet"}, direct(nil))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("answers network B and not network A", func() {
@@ -260,7 +258,7 @@ var _ = Describe("Cadet DNS", func() {
 				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, direct(map[string]string{"cadet-acl": "allow neta"}))).To(Succeed())
 				Expect(svc2.Register(consul, []string{"cadet"}, direct(map[string]string{"cadet-acl": "allow netb"}))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("respects per-service overrides on both networks", func() {
@@ -276,7 +274,7 @@ var _ = Describe("Cadet DNS", func() {
 			BeforeEach(func() {
 				writeACL("deny *", "deny")
 				Expect(svc1.Register(consul, []string{"cadet"}, direct(map[string]string{"cadet-acl": "allow all"}))).To(Succeed())
-				time.Sleep(propagationDelay)
+				SettleDNS(consul)
 			})
 
 			It("answers every network in the group", func() {

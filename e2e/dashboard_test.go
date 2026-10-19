@@ -1,8 +1,6 @@
 package e2e
 
 import (
-	"time"
-
 	capi "github.com/hashicorp/consul/api"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -40,7 +38,7 @@ var _ = Describe("Cadet dashboard", func() {
 			InternalIP:   "172.30.0.4",
 		}
 		Expect(svc1.Register(consul, []string{"cadet"}, map[string]string{"cadet-name": "dashsvc"})).To(Succeed())
-		time.Sleep(propagationDelay)
+		SettleProxy(consul)
 	})
 
 	AfterEach(func() {
