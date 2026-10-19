@@ -20,8 +20,9 @@ COPY images/coredns/plugin.cfg /go/coredns/plugin.cfg
 
 RUN cd coredns \
     && echo "replace github.com/tmacro/cadet => /cadet" >> go.mod \
-    && make gen \
-    && GOFLAGS="-buildvcs=false" SYSTEM="GOOS=${TARGETOS} GOARCH=${TARGETARCH}" BINARY="dist/coredns" make -e coredns
+    && GOLANG_VERSION="$(cat .go-version)+auto" \
+    && make gen GOLANG_VERSION="$GOLANG_VERSION" \
+    && GOFLAGS="-buildvcs=false" SYSTEM="GOOS=${TARGETOS} GOARCH=${TARGETARCH}" BINARY="dist/coredns" make -e coredns GOLANG_VERSION="$GOLANG_VERSION"
 
 FROM alpine
 

@@ -54,19 +54,23 @@ caddy: | $(XCADDY) ## Build ./dist/caddy with the cadet plugin
 		--replace github.com/tmacro/cadet=.
 
 COREDNS_SRC := $(BUILD)/coredns-$(COREDNS_VERSION)
+COREDNS_TARBALL := $(COREDNS_SRC).tar.gz
+COREDNS_TOOLCHAIN = go$$(cat .go-version)+auto
 
-$(COREDNS_SRC): | $(BUILD)
-	rm -rf $@.tmp && mkdir -p $@.tmp
-	curl -sSfL https://api.github.com/repos/coredns/coredns/tarball/$(COREDNS_VERSION) | tar -xzf - -C $@.tmp --strip-components=1
-	echo "replace github.com/tmacro/cadet => $(CURDIR)" >> $@.tmp/go.mod
+$(COREDNS_TARBALL): | $(BUILD)
+	curl -sSfL -o $@.tmp https://api.github.com/repos/coredns/coredns/tarball/$(COREDNS_VERSION)
 	mv $@.tmp $@
 
 .PHONY: coredns
-coredns: | $(COREDNS_SRC) $(DIST) ## Build ./dist/coredns with the cadet plugin
+coredns: $(COREDNS_TARBALL) | $(DIST) ## Build ./dist/coredns with the cadet plugin
+	rm -rf $(COREDNS_SRC) && mkdir -p $(COREDNS_SRC)
+	tar -xzf $(COREDNS_TARBALL) -C $(COREDNS_SRC) --strip-components=1
+	echo "replace github.com/tmacro/cadet => $(CURDIR)" >> $(COREDNS_SRC)/go.mod
 	cp images/coredns/plugin.cfg $(COREDNS_SRC)/plugin.cfg
-	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH $(GO) generate coredns.go
-	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH $(GO) get
+	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH GOTOOLCHAIN=$(COREDNS_TOOLCHAIN) $(GO) generate coredns.go
+	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH GOTOOLCHAIN=$(COREDNS_TOOLCHAIN) $(GO) get
 	$(MAKE) -C $(COREDNS_SRC) coredns BINARY=$(DIST)/coredns GOFLAGS=-buildvcs=false \
+		GOLANG_VERSION="$$(cat $(COREDNS_SRC)/.go-version)+auto" \
 		SYSTEM="GOOS=$(GOOS) GOARCH=$(GOARCH)"
 
 .PHONY: dashboard
@@ -130,18 +134,30 @@ $(STATICCHECK):   PACKAGE=honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSI
 $(GOLANGCI_LINT): PACKAGE=github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 $(GOIMPORTS):     PACKAGE=golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 $(GINKGO):        PACKAGE=github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
-$(GORELEASER):    PACKAGE=github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 
 TOOLS := $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS) $(GINKGO) $(TAILWIND) $(GORELEASER)
 
 TAILWIND_OS   := $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 TAILWIND_ARCH := $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,x64)
 
-$(TAILWIND):
-	@mkdir -p $(BIN)
+$(TAILWIND): | $(BIN)
 	curl -sSfL -o $@.tmp https://github.com/tailwindlabs/tailwindcss/releases/download/v$(TAILWIND_VERSION)/tailwindcss-$(TAILWIND_OS)-$(TAILWIND_ARCH)
 	chmod +x $@.tmp
 	mv $@.tmp $@
+
+GORELEASER_OS    := $(if $(filter Darwin,$(shell uname -s)),Darwin,Linux)
+GORELEASER_ARCH  := $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,x86_64)
+GORELEASER_URL   := https://github.com/goreleaser/goreleaser/releases/download/$(GORELEASER_VERSION)
+GORELEASER_ASSET := goreleaser_$(GORELEASER_OS)_$(GORELEASER_ARCH).tar.gz
+SHA256SUM        := $(if $(filter Darwin,$(shell uname -s)),shasum -a 256,sha256sum)
+
+$(GORELEASER): | $(BIN)
+	@tmp=$$(mktemp -d); trap 'rm -rf $$tmp' EXIT; \
+	curl -sSfL -o $$tmp/$(GORELEASER_ASSET) $(GORELEASER_URL)/$(GORELEASER_ASSET); \
+	curl -sSfL -o $$tmp/checksums.txt $(GORELEASER_URL)/checksums.txt; \
+	(cd $$tmp && grep " $(GORELEASER_ASSET)$$" checksums.txt | $(SHA256SUM) -c --quiet -); \
+	tar -xzf $$tmp/$(GORELEASER_ASSET) -C $$tmp goreleaser; \
+	mv $$tmp/goreleaser $@
 
 ##@ Tools
 

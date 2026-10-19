@@ -203,8 +203,8 @@ Go, Docker (with buildx and compose) and curl need to be installed.
 
 Images build for `linux/amd64` by default; override `DOCKER_PLATFORMS` for
 other targets, e.g. `make caddy-docker DOCKER_PLATFORMS=linux/arm64`.
-`make coredns` unpacks the upstream CoreDNS source into `./build` once per
-version and builds it against this checkout, using the plugin list in
+`make coredns` downloads the upstream CoreDNS source tarball into `./build`
+once per version, re-extracts it on every build and builds it against this checkout, using the plugin list in
 `images/coredns/plugin.cfg`.
 
 `make build` targets the host; set `GOOS`/`GOARCH` to cross-compile, e.g.
