@@ -1,0 +1,13 @@
+# Packages the caddy binary built by `make release-binaries`; the build context
+# is build/release/assets. See images/caddy/Dockerfile for the source build.
+FROM alpine
+
+ARG TARGETOS TARGETARCH
+
+ENV XDG_DATA_HOME=/data
+
+ENV XDG_CONFIG_HOME=/config
+
+COPY --chmod=755 caddy_${TARGETOS}_${TARGETARCH} /usr/local/bin/caddy
+
+CMD ["/usr/local/bin/caddy", "run"]

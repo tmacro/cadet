@@ -1,0 +1,10 @@
+# Packages the coredns binary built by `make release-binaries`; the build
+# context is build/release/assets. See images/coredns/Dockerfile for the
+# source build.
+FROM alpine
+
+ARG TARGETOS TARGETARCH
+
+COPY --chmod=755 coredns_${TARGETOS}_${TARGETARCH} /usr/local/bin/coredns
+
+CMD ["/usr/local/bin/coredns", "-conf", "/etc/coredns/Corefile"]

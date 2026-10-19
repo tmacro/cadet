@@ -10,6 +10,10 @@ BUILD := $(CURDIR)/build
 
 PROJECT_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 
+# Target platform for the binaries in ./dist; defaults to the host.
+GOOS   ?= $(shell $(GO) env GOOS)
+GOARCH ?= $(shell $(GO) env GOARCH)
+
 gomod_version = $(shell $(GO) list -m -f '{{.Version}}' $(1))
 
 CADDY_VERSION   ?= $(call gomod_version,github.com/caddyserver/caddy/v2)
@@ -21,6 +25,7 @@ STATICCHECK_VERSION   := v0.8.2
 GOLANGCI_LINT_VERSION := v2.15.0
 GOIMPORTS_VERSION     := v0.51.0
 TAILWIND_VERSION      := 4.1.12
+GORELEASER_VERSION    := v2.18.3
 GINKGO_VERSION        := $(call gomod_version,github.com/onsi/ginkgo/v2)
 
 XCADDY        := $(BIN)/xcaddy
@@ -30,6 +35,7 @@ GOLANGCI_LINT := $(BIN)/golangci-lint
 GOIMPORTS     := $(BIN)/goimports
 GINKGO        := $(BIN)/ginkgo
 TAILWIND      := $(BIN)/tailwindcss
+GORELEASER    := $(BIN)/goreleaser
 
 ##@ Build
 
@@ -41,7 +47,7 @@ build: caddy coredns dashboard ## Build all binaries into ./dist
 
 .PHONY: caddy
 caddy: | $(XCADDY) ## Build ./dist/caddy with the cadet plugin
-	$(XCADDY) build $(CADDY_VERSION) \
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(XCADDY) build $(CADDY_VERSION) \
 		--output $(DIST)/caddy \
 		--with github.com/caddy-dns/cloudflare \
 		--with github.com/tmacro/cadet/plugins/caddy \
@@ -58,12 +64,14 @@ $(COREDNS_SRC): | $(BUILD)
 .PHONY: coredns
 coredns: | $(COREDNS_SRC) $(DIST) ## Build ./dist/coredns with the cadet plugin
 	cp images/coredns/plugin.cfg $(COREDNS_SRC)/plugin.cfg
-	$(MAKE) -C $(COREDNS_SRC) gen
-	$(MAKE) -C $(COREDNS_SRC) coredns BINARY=$(DIST)/coredns GOFLAGS=-buildvcs=false
+	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH $(GO) generate coredns.go
+	cd $(COREDNS_SRC) && env -u GOOS -u GOARCH $(GO) get
+	$(MAKE) -C $(COREDNS_SRC) coredns BINARY=$(DIST)/coredns GOFLAGS=-buildvcs=false \
+		SYSTEM="GOOS=$(GOOS) GOARCH=$(GOARCH)"
 
 .PHONY: dashboard
 dashboard: | $(DIST) ## Build ./dist/cadet-dashboard
-	$(GO) build -o $(DIST)/cadet-dashboard ./cmd/dashboard
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 $(GO) build -o $(DIST)/cadet-dashboard ./cmd/dashboard
 
 CSS_IN  := internal/webui/tailwind.css
 CSS_OUT := internal/webui/static/css/main.css
@@ -113,7 +121,7 @@ $(BIN):
 	@mkdir -p $@
 
 $(BIN)/%: | $(BIN)
-	env GOBIN=$(abspath $(BIN)) $(GO) install $(PACKAGE)
+	env -u GOOS -u GOARCH GOBIN=$(abspath $(BIN)) $(GO) install $(PACKAGE)
 
 $(XCADDY):        PACKAGE=github.com/caddyserver/xcaddy/cmd/xcaddy@$(XCADDY_VERSION)
 $(DEADCODE):      PACKAGE=golang.org/x/tools/cmd/deadcode@$(DEADCODE_VERSION)
@@ -121,8 +129,9 @@ $(STATICCHECK):   PACKAGE=honnef.co/go/tools/cmd/staticcheck@$(STATICCHECK_VERSI
 $(GOLANGCI_LINT): PACKAGE=github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 $(GOIMPORTS):     PACKAGE=golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 $(GINKGO):        PACKAGE=github.com/onsi/ginkgo/v2/ginkgo@$(GINKGO_VERSION)
+$(GORELEASER):    PACKAGE=github.com/goreleaser/goreleaser/v2@$(GORELEASER_VERSION)
 
-TOOLS := $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS) $(GINKGO) $(TAILWIND)
+TOOLS := $(XCADDY) $(DEADCODE) $(STATICCHECK) $(GOLANGCI_LINT) $(GOIMPORTS) $(GINKGO) $(TAILWIND) $(GORELEASER)
 
 TAILWIND_OS   := $(if $(filter Darwin,$(shell uname -s)),macos,linux)
 TAILWIND_ARCH := $(if $(filter arm64 aarch64,$(shell uname -m)),arm64,x64)
@@ -211,6 +220,57 @@ e2e-up: ## Build and start the e2e stack
 e2e-down: ## Stop and remove the e2e stack
 	$(E2E_COMPOSE) down --volumes --remove-orphans
 
+##@ Release
+
+RELEASE_PLATFORMS ?= linux/amd64
+RELEASE_DIR       := $(BUILD)/release
+RELEASE_ASSETS    := $(RELEASE_DIR)/assets
+
+.PHONY: release-binaries
+release-binaries: | $(XCADDY) ## Build binaries for each of RELEASE_PLATFORMS
+	rm -rf $(RELEASE_DIR) && mkdir -p $(RELEASE_ASSETS)
+	for platform in $(RELEASE_PLATFORMS); do \
+		os=$${platform%/*}; arch=$${platform#*/}; \
+		out=$(RELEASE_DIR)/$${os}_$${arch}; \
+		GOOS=$$os GOARCH=$$arch $(MAKE) build DIST=$$out; \
+		for bin in $$out/*; do \
+			cp $$bin $(RELEASE_ASSETS)/$$(basename $$bin)_$${os}_$${arch}; \
+		done; \
+	done
+
+RELEASE_IMAGES := $(CADDY_DOCKER_IMAGE)=caddy $(COREDNS_DOCKER_IMAGE)=coredns
+
+comma := ,
+empty :=
+space := $(empty) $(empty)
+
+.PHONY: release-images
+release-images: ## Build release images from the release binaries (PUSH=1 to push)
+	for image in $(RELEASE_IMAGES); do \
+		name=$${image%%=*}; dir=$${image#*=}; \
+		docker buildx build \
+			--platform $(subst $(space),$(comma),$(strip $(RELEASE_PLATFORMS))) \
+			--tag $$name:$(PROJECT_VERSION) \
+			--tag $$name:latest \
+			$(if $(PUSH),--push) \
+			-f images/$$dir/Dockerfile.release $(RELEASE_ASSETS); \
+	done
+
+.PHONY: release
+release: | $(GORELEASER) ## Publish a GitHub release (HEAD must be a clean, tagged commit)
+	@git describe --exact-match --tags HEAD >/dev/null 2>&1 || { echo "HEAD is not tagged"; exit 1; }
+	@git diff --quiet HEAD || { echo "working tree is dirty"; exit 1; }
+	$(GORELEASER) check
+	$(MAKE) release-binaries
+	$(GORELEASER) release --clean
+	$(MAKE) release-images PUSH=1
+
+.PHONY: release-snapshot
+release-snapshot: | $(GORELEASER) ## Dry-run the release into ./build/goreleaser without publishing
+	$(MAKE) release-binaries
+	$(GORELEASER) release --clean --snapshot
+	$(MAKE) release-images
+
 ##@ Misc
 
 .PHONY: ci
@@ -228,4 +288,4 @@ fclean: | clean ## Remove build output and tools
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*## " } \
 		/^##@/ { printf "\n%s\n", substr($$0, 5) } \
-		/^[a-zA-Z0-9_-]+:.*## / { printf "  %-14s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+		/^[a-zA-Z0-9_-]+:.*## / { printf "  %-18s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)

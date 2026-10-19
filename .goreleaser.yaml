@@ -1,0 +1,22 @@
+# Publishes the binaries built by `make release-binaries`; see `make release`.
+version: 2
+
+project_name: cadet
+
+# ./dist belongs to `make build`.
+dist: build/goreleaser
+
+builds:
+  - skip: true
+
+checksum:
+  name_template: checksums.txt
+  extra_files:
+    - glob: build/release/assets/*
+
+release:
+  extra_files:
+    - glob: build/release/assets/*
+
+changelog:
+  sort: asc

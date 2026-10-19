@@ -207,5 +207,32 @@ other targets, e.g. `make caddy-docker DOCKER_PLATFORMS=linux/arm64`.
 version and builds it against this checkout, using the plugin list in
 `images/coredns/plugin.cfg`.
 
+`make build` targets the host; set `GOOS`/`GOARCH` to cross-compile, e.g.
+`make build GOOS=linux GOARCH=arm64 DIST=./dist/arm64`.
+
+`make release` publishes a GitHub release with [GoReleaser](https://goreleaser.com/).
+It runs `make build` for each of `RELEASE_PLATFORMS` (default `linux/amd64`;
+space-separated, e.g. `"linux/amd64 linux/arm64"`) and hands the binaries,
+named `<binary>_<os>_<arch>` (e.g. `caddy_linux_amd64`), to GoReleaser, which
+only adds checksums and a changelog and uploads them. It then pushes
+`tmacro/cadet-proxy` and `tmacro/cadet-dns`, tagged with the version and
+`latest`; these images package the same release binaries rather than
+building from source. It refuses to run unless HEAD is a clean, tagged
+commit, and needs `GITHUB_TOKEN` set and a `docker login`. Releasing more than
+one platform needs a buildx builder that can build multi-platform images.
+
+`make release-snapshot` does everything but publish, and `make release-images`
+builds the images from existing release binaries (`PUSH=1` to push).
+
+Pushing a `v*` tag runs `make check`, `make test` and `make e2e`, then `make release`, in
+GitHub Actions (`.github/workflows/release.yml`), so a release is just:
+
+```sh
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+The workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository
+secrets for the image push; the GitHub release uses the built-in token.
+
 `make clean` removes `./dist` and `./build`; `make fclean` also removes the
 tools in `./bin`.
