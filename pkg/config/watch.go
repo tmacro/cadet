@@ -139,14 +139,39 @@ func (w *Watcher) Caddy() *caddy.Config {
 }
 
 func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, configPrefix string, extractCfg service.ExtractConfig) error {
-	var wg sync.WaitGroup
-	defer wg.Wait()
-
 	catalogServiceUpdates := make(chan service.Map, 1)
 	staticServiceUpdates := make(chan service.Map, 1)
 	aclUpdates := make(chan *ACL, 1)
 	zoneUpdates := make(chan *Zone, 1)
 	configUpdates := make(chan *caddy.Config, 1)
+
+	// Updates still buffered when the loop exits have had their watch index
+	// recorded, so the next Run won't fetch them again. Apply them to the
+	// global state rather than losing them, e.g. when onChange reloads caddy,
+	// which stops this Run while changes keep arriving.
+	var wg sync.WaitGroup
+	defer func() {
+		wg.Wait()
+		globalMu.Lock()
+		defer globalMu.Unlock()
+		for svcMap := range catalogServiceUpdates {
+			globalCatalogServices = svcMap
+		}
+		for svcMap := range staticServiceUpdates {
+			globalStaticServices = svcMap
+		}
+		for aclCfg := range aclUpdates {
+			globalACLCfg = aclCfg
+		}
+		for zoneCfg := range zoneUpdates {
+			globalZoneCfg = zoneCfg
+		}
+		for caddyCfg := range configUpdates {
+			if caddyCfg != nil {
+				globalCaddyCfg = caddyCfg
+			}
+		}
+	}()
 
 	catalogServiceWatch := WatchConsulCatalog(catalog, extractCfg)
 	staticServiceWatch := WatchStaticServices(kv, configPrefix+"/services/")
