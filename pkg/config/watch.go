@@ -49,6 +49,9 @@ func runWatch[T any](ctx context.Context, wg *sync.WaitGroup, name string, w wat
 			return
 		default:
 			nextIndex, value, err := w(ctx, lastIndex)
+			if ctx.Err() != nil {
+				return
+			}
 			if err != nil {
 				backoff, exit := onError(err)
 				if exit {
