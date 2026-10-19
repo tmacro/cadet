@@ -1,7 +1,7 @@
 name: Release
 
 # Publishes a release for every pushed version tag via `make release`: the
-# binaries go to a GitHub release, the images to Docker Hub. Nothing is
+# binaries go to a GitHub release, the images to the GitHub container registry. Nothing is
 # published unless `make check`, `make test` and `make e2e` pass on the
 # tagged commit.
 
@@ -42,9 +42,9 @@ jobs:
   release:
     needs: [check, test, e2e]
     runs-on: ubuntu-latest
-    # Only this job publishes, so only it can write.
     permissions:
       contents: write
+      packages: write
     steps:
       # Full history so goreleaser can build the changelog from the previous
       # tag.
@@ -58,8 +58,9 @@ jobs:
 
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - run: make release
         env:

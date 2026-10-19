@@ -1,7 +1,6 @@
-# Packages the coredns binary built by `make release-binaries`; the build
-# context is build/release/assets. See images/coredns/Dockerfile for the
-# source build.
 FROM alpine
+
+LABEL org.opencontainers.image.source=https://github.com/tmacro/cadet
 
 ARG TARGETOS TARGETARCH
 

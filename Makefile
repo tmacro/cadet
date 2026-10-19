@@ -87,8 +87,9 @@ css-watch: | $(TAILWIND) ## Regenerate the dashboard stylesheet on change
 ##@ Images
 
 DOCKER_PLATFORMS    ?= linux/amd64
+IMAGE_REGISTRY      ?= ghcr.io/tmacro
 
-CADDY_DOCKER_IMAGE := tmacro/cadet-proxy
+CADDY_DOCKER_IMAGE := $(IMAGE_REGISTRY)/cadet-proxy
 CADDY_DOCKER_TAG := $(PROJECT_VERSION)
 
 .PHONY: caddy-docker
@@ -100,7 +101,7 @@ caddy-docker: ## Build caddy docker image
 		--tag $(CADDY_DOCKER_IMAGE):$(CADDY_DOCKER_TAG) \
 		-f $(CURDIR)/images/caddy/Dockerfile .
 
-COREDNS_DOCKER_IMAGE := tmacro/cadet-dns
+COREDNS_DOCKER_IMAGE := $(IMAGE_REGISTRY)/cadet-dns
 COREDNS_DOCKER_TAG := $(PROJECT_VERSION)
 
 .PHONY: coredns-docker

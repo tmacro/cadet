@@ -187,8 +187,8 @@ make caddy           # ./dist/caddy with the cadet plugin baked in
 make coredns         # ./dist/coredns with the cadet plugin baked in
 make dashboard       # ./dist/cadet-dashboard, the standalone dashboard
 make css             # regenerate the dashboard stylesheet (css-watch to rebuild on change)
-make caddy-docker    # tmacro/cadet-proxy, tagged with `git describe`
-make coredns-docker  # tmacro/cadet-dns, tagged with `git describe`
+make caddy-docker    # ghcr.io/tmacro/cadet-proxy, tagged with `git describe`
+make coredns-docker  # ghcr.io/tmacro/cadet-dns, tagged with `git describe`
 ```
 
 `make fmt` and `make tidy` fix what `check-fmt` and `check-tidy` complain
@@ -215,10 +215,10 @@ It runs `make build` for each of `RELEASE_PLATFORMS` (default `linux/amd64`;
 space-separated, e.g. `"linux/amd64 linux/arm64"`) and hands the binaries,
 named `<binary>_<os>_<arch>` (e.g. `caddy_linux_amd64`), to GoReleaser, which
 only adds checksums and a changelog and uploads them. It then pushes
-`tmacro/cadet-proxy` and `tmacro/cadet-dns`, tagged with the version and
+`ghcr.io/tmacro/cadet-proxy` and `ghcr.io/tmacro/cadet-dns`, tagged with the version and
 `latest`; these images package the same release binaries rather than
 building from source. It refuses to run unless HEAD is a clean, tagged
-commit, and needs `GITHUB_TOKEN` set and a `docker login`. Releasing more than
+commit, and needs `GITHUB_TOKEN` set and a `docker login ghcr.io`. Releasing more than
 one platform needs a buildx builder that can build multi-platform images.
 
 `make release-snapshot` does everything but publish, and `make release-images`
@@ -231,8 +231,9 @@ GitHub Actions (`.github/workflows/release.yml`), so a release is just:
 git tag v0.1.0 && git push origin v0.1.0
 ```
 
-The workflow needs `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` repository
-secrets for the image push; the GitHub release uses the built-in token.
+The workflow needs no secrets: both the GitHub release and the image push to
+ghcr.io use the built-in `GITHUB_TOKEN`. Override `IMAGE_REGISTRY` (default
+`ghcr.io/tmacro`) to push elsewhere.
 
 `make clean` removes `./dist` and `./build`; `make fclean` also removes the
 tools in `./bin`.
