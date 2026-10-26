@@ -258,7 +258,19 @@ func (plug *Plugin) ServeDNS(ctx context.Context, w dns.ResponseWriter, r *dns.M
 	action := plug.evalACL(entry, &ip, aclCfg)
 	if action.IsDeny() {
 		log.Debugf("ACL denied for %s in zone %s", qname, zone)
-		return plugin.NextOrFailure(plug.Name(), plug.Next, ctx, w, r)
+
+		// Answer denied queries ourselves so they never reach later plugins
+		// such as forward, which would resolve the name upstream.
+		m := new(dns.Msg)
+		m.SetRcode(r, dns.RcodeRefused)
+
+		err := w.WriteMsg(m)
+		if err != nil {
+			log.Errorf("Failed to write refused response for %s: %v", qname, err)
+			return dns.RcodeServerFailure, err
+		}
+
+		return dns.RcodeSuccess, nil
 	}
 
 	log.Debugf("ACL allowed for %s in zone %s", qname, zone)

@@ -11,4 +11,6 @@
         zone_key cadet-zone
         acl_key cadet-acl
     }
+
+    cache 30
 }

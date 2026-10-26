@@ -236,7 +236,7 @@ var _ = Describe("Cadet DNS", func() {
 
 			It("answers network A and not network B", func() {
 				ExpectRecords(resolverA, dnsServer, "svc1.cadet.internal", svc1IP)
-				ExpectNoRecords(resolverB, dnsServer, "svc1.cadet.internal")
+				ExpectRefused(resolverB, dnsServer, "svc1.cadet.internal")
 			})
 		})
 
@@ -248,7 +248,7 @@ var _ = Describe("Cadet DNS", func() {
 			})
 
 			It("answers network B and not network A", func() {
-				ExpectNoRecords(resolverA, dnsServer, "svc1.cadet.internal")
+				ExpectRefused(resolverA, dnsServer, "svc1.cadet.internal")
 				ExpectRecords(resolverB, dnsServer, "svc1.cadet.internal", svc1IP)
 			})
 		})
@@ -263,9 +263,9 @@ var _ = Describe("Cadet DNS", func() {
 
 			It("respects per-service overrides on both networks", func() {
 				ExpectRecords(resolverA, dnsServer, "svc1.cadet.internal", svc1IP)
-				ExpectNoRecords(resolverA, dnsServer, "svc2.cadet.internal")
+				ExpectRefused(resolverA, dnsServer, "svc2.cadet.internal")
 
-				ExpectNoRecords(resolverB, dnsServer, "svc1.cadet.internal")
+				ExpectRefused(resolverB, dnsServer, "svc1.cadet.internal")
 				ExpectRecords(resolverB, dnsServer, "svc2.cadet.internal", svc2IP)
 			})
 		})

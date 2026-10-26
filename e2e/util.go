@@ -210,3 +210,13 @@ func ExpectNoRecords(res Resolver, server, name string) {
 	Expect(err).NotTo(HaveOccurred(), "resolve %s via %s", name, res.Endpoint)
 	Expect(answers).To(BeEmpty(), "resolve %s via %s: expected no answers", name, res.Endpoint)
 }
+
+// ExpectRefused asserts that name is denied by the ACL, which the cadet
+// plugin answers with REFUSED rather than passing to the next plugin.
+func ExpectRefused(res Resolver, server, name string) {
+	GinkgoHelper()
+	rcode, answers, err := res.Resolve(server, name)
+	Expect(err).NotTo(HaveOccurred(), "resolve %s via %s", name, res.Endpoint)
+	Expect(rcode).To(Equal("REFUSED"), "resolve %s via %s: rcode", name, res.Endpoint)
+	Expect(answers).To(BeEmpty(), "resolve %s via %s: expected no answers", name, res.Endpoint)
+}
