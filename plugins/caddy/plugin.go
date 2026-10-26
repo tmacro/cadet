@@ -37,7 +37,7 @@ const (
 type Plugin struct {
 	Consul           *config.ConsulConfig    `json:"consul"`
 	AutoReverseProxy *AutoReverseProxyConfig `json:"auto_reverse_proxy"`
-	Dashboard        *DashboardConfig        `json:"dashboard,omitempty"`
+	Dashboard        *config.DashboardConfig `json:"dashboard,omitempty"`
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -65,7 +65,7 @@ func NewPlugin() *Plugin {
 	return &Plugin{
 		Consul:           config.DefaultConsulConfig(),
 		AutoReverseProxy: DefaultAutoReverseProxyConfig(),
-		Dashboard:        DefaultDashboardConfig(),
+		Dashboard:        config.DefaultDashboardConfig(),
 		backoffMu:        &sync.Mutex{},
 	}
 }

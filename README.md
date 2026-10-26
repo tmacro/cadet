@@ -129,9 +129,9 @@ is served by caddy itself rather than proxied to an upstream.
 
 `name` defaults to `cadet`, `zones` to the default zone and `acl` to the
 global default policy, so `{"enabled": true}` publishes the dashboard at
-`cadet.<default_zone>`. The service exists only in caddy, so CoreDNS doesn't
-answer for it; point the hostname at the proxy yourself (or register a
-matching service in consul).
+`cadet.<default_zone>`. The CoreDNS plugin reads the same block from
+`cadet/caddy.json` and resolves the dashboard's hostname to the proxy, subject
+to the same ACL.
 
 ### Zone — `consul kv put cadet/zone.json ...`
 

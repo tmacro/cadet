@@ -97,6 +97,17 @@ var _ = Describe("Cadet DNS", func() {
 		})
 	})
 
+	Context("with the dashboard enabled in the caddy config", func() {
+		BeforeEach(func() {
+			SettleDNS(consul)
+		})
+
+		It("resolves the dashboard to the proxy", func() {
+			ExpectRecords(resolverA, dnsServer, dashboardHost, proxyIP)
+			ExpectRecords(resolverB, dnsServer, dashboardHost, proxyIP)
+		})
+	})
+
 	Context("with services pinned to a secondary zone", func() {
 		BeforeEach(func() {
 			meta := map[string]string{"cadet-zone": "alternate.internal"}
@@ -237,6 +248,11 @@ var _ = Describe("Cadet DNS", func() {
 			It("answers network A and not network B", func() {
 				ExpectRecords(resolverA, dnsServer, "svc1.cadet.internal", svc1IP)
 				ExpectRefused(resolverB, dnsServer, "svc1.cadet.internal")
+			})
+
+			It("applies the default policy to the dashboard", func() {
+				ExpectRecords(resolverA, dnsServer, dashboardHost, proxyIP)
+				ExpectRefused(resolverB, dnsServer, dashboardHost)
 			})
 		})
 

@@ -3,7 +3,6 @@ package cadet
 import (
 	"encoding/json"
 	"fmt"
-	"maps"
 	"net"
 	"slices"
 
@@ -57,7 +56,7 @@ func (plug *Plugin) generateCaddyConfig(conf *caddy.Config, services service.Map
 		}
 
 		if plugConfig.Dashboard == nil {
-			plugConfig.Dashboard = DefaultDashboardConfig()
+			plugConfig.Dashboard = config.DefaultDashboardConfig()
 		}
 	} else {
 		return nil
@@ -93,15 +92,7 @@ func (plug *Plugin) generateCaddyConfig(conf *caddy.Config, services service.Map
 		},
 	}
 
-	if plugConfig.Dashboard.Enabled {
-		dashboard := plugConfig.Dashboard.Service()
-		if _, ok := services[dashboard.ID]; ok {
-			log.Warnf("service %s shadows the dashboard, not publishing the dashboard", dashboard.ID)
-		} else {
-			services = maps.Clone(services)
-			services[dashboard.ID] = dashboard
-		}
-	}
+	services = plugConfig.Dashboard.AddTo(services)
 
 	serviceNames := make([]string, 0, len(services))
 	for name := range services {

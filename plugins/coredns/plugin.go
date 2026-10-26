@@ -161,6 +161,16 @@ func (plug *Plugin) onChange(rc config.RemoteConfig) bool {
 	}
 
 	svcs := rc.Services()
+
+	// The dashboard exists only in the caddy config, so publish it here too
+	// for its hostname to resolve to the proxy like the caddy plugin serves it.
+	dashboard, err := config.DashboardFromCaddy(rc.Caddy())
+	if err != nil {
+		log.Errorf("failed to load dashboard config: %v", err)
+	} else {
+		svcs = dashboard.AddTo(svcs)
+	}
+
 	for _, svc := range svcs {
 		if svc.NoPublish {
 			continue

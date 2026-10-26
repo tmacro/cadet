@@ -6,7 +6,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// dashboardHost is where the caddy plugin publishes the dashboard service,
+// dashboardHost is where the dashboard service is published (and resolved),
 // per the "dashboard" block of CaddyConfigTemplate.
 const dashboardHost = "dashboard.cadet.internal"
 
