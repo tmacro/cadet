@@ -17,12 +17,13 @@ var (
 	watchIndexes sync.Map
 	globalMu     sync.RWMutex
 
-	globalNeedsInit       = true
-	globalCatalogServices service.Map
-	globalStaticServices  service.Map
-	globalACLCfg          *ACL
-	globalZoneCfg         *Zone
-	globalCaddyCfg        *caddy.Config
+	globalNeedsInit         = true
+	globalCatalogServices   service.Map
+	globalCatalogExtractCfg service.ExtractConfig
+	globalStaticServices    service.Map
+	globalACLCfg            *ACL
+	globalZoneCfg           *Zone
+	globalCaddyCfg          *caddy.Config
 )
 
 func getWatchIndex(name string) uint64 {
@@ -156,6 +157,7 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 		defer globalMu.Unlock()
 		for svcMap := range catalogServiceUpdates {
 			globalCatalogServices = svcMap
+			globalCatalogExtractCfg = extractCfg
 		}
 		for svcMap := range staticServiceUpdates {
 			globalStaticServices = svcMap
@@ -172,6 +174,13 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 			}
 		}
 	}()
+
+	globalMu.RLock()
+	catalogStale := globalCatalogExtractCfg != extractCfg
+	globalMu.RUnlock()
+	if catalogStale {
+		setWatchIndex("catalog_services", 0)
+	}
 
 	catalogServiceWatch := WatchConsulCatalog(catalog, extractCfg)
 	staticServiceWatch := WatchStaticServices(kv, configPrefix+"/services/")
@@ -211,9 +220,11 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 			log.Debug("got catalog update ", svcMap)
 			globalMu.Lock()
 			globalCatalogServices = svcMap
+			globalCatalogExtractCfg = extractCfg
 			globalMu.Unlock()
 			needsNotification = true
 			hasCatalog = true
+			catalogStale = false
 
 		case svcMap := <-staticServiceUpdates:
 			log.Debug("got static service update")
@@ -269,6 +280,12 @@ func (w *Watcher) Run(ctx context.Context, catalog *api.Catalog, kv *api.KV, con
 
 			if needsInit {
 				log.Debug("waiting for init")
+				break
+			}
+
+			if catalogStale {
+				log.Debug("waiting for catalog refetch with new extract config")
+				needsNotification = true
 				break
 			}
 
